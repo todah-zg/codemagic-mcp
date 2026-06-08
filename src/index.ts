@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows } from "./codemagic.js";
 import { z } from "zod";
-import { listAscApps } from "./asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus } from "./asc.js";
 
 
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -137,7 +137,55 @@ server.registerTool("list_asc_apps", {
   };
 });
 
+server.registerTool("list_asc_builds", {
+  description: "List TestFlight builds for an app in App Store Connect",
+  inputSchema: {
+    app_id: z.string().describe("The App Store Connect app ID"),
+  },
+}, async ({ app_id }) => {
+  const builds = await listAscBuilds(app_id);
+  const text = builds.map(b =>
+    `v${b.version} — ${b.processingState}${b.expired ? " (expired)" : ""} — uploaded ${b.uploadedDate} (${b.id})`
+  ).join("\n");
+  return {
+    content: [{ type: "text", text: text || "No builds found." }],
+  };
+});
 
+server.registerTool("list_testflight_groups", {
+  description: "List TestFlight beta groups for an app",
+  inputSchema: {
+    app_id: z.string().describe("The App Store Connect app ID"),
+  },
+}, async ({ app_id }) => {
+  const groups = await listTestFlightGroups(app_id);
+  const text = groups.map(g =>
+    `${g.name} — ${g.isInternalGroup ? "internal" : "external"} (${g.id})`
+  ).join("\n");
+  return {
+    content: [{ type: "text", text: text || "No groups found." }],
+  };
+});
+
+server.registerTool("get_review_status", {
+  description: "Get the App Store review status for an app",
+  inputSchema: {
+    app_id: z.string().describe("The App Store Connect app ID"),
+  },
+}, async ({ app_id }) => {
+  const status = await getReviewStatus(app_id);
+  const lines = [
+    `Review state: ${status.reviewState}`,
+    `Version: ${status.version?.version ?? "none"} (${status.version?.state ?? "unknown"})`,
+    `Next action: ${status.nextAction}`,
+  ];
+  if (status.blockers.length > 0) {
+    lines.push(`Blockers:\n${status.blockers.map(b => `  - ${b}`).join("\n")}`);
+  }
+  return {
+    content: [{ type: "text", text: lines.join("\n") }],
+  };
+});
 
 
 

@@ -36,3 +36,78 @@ export async function listAscApps(): Promise<AscApp[]> {
         bundleId: app.attributes.bundleId,
     }));
 }
+
+
+interface AscBuildRaw {
+    id: string;
+    attributes: {
+        version: string;
+        uploadedDate: string;
+        processingState: string;
+        expired: boolean;
+    };
+}
+
+export interface AscBuild {
+  id: string;
+  version: string;
+  uploadedDate: string;
+  processingState: string;
+  expired: boolean;
+}
+
+export async function listAscBuilds(appId: string): Promise<AscBuild[]> {
+  const response = await runAsc<{ data: AscBuildRaw[] }>(["builds", "list", "--app", appId]);
+  return response.data.map(b => ({
+    id: b.id,
+    version: b.attributes.version,
+    uploadedDate: b.attributes.uploadedDate,
+    processingState: b.attributes.processingState,
+    expired: b.attributes.expired,
+  }));
+}
+
+interface AscBetaGroupRaw {
+  id: string;
+  attributes: {
+    name: string;
+    isInternalGroup?: boolean;
+    feedbackEnabled: boolean;
+  };
+}
+
+export interface AscBetaGroup {
+  id: string;
+  name: string;
+  isInternalGroup: boolean;
+  feedbackEnabled: boolean;
+}
+
+export async function listTestFlightGroups(appId: string): Promise<AscBetaGroup[]> {
+  const response = await runAsc<{ data: AscBetaGroupRaw[] }>(["testflight", "groups", "list", "--app", appId]);
+  return response.data.map(g => ({
+    id: g.id,
+    name: g.attributes.name,
+    isInternalGroup: g.attributes.isInternalGroup ?? false,
+    feedbackEnabled: g.attributes.feedbackEnabled,
+  }));
+}
+
+export interface AscReviewStatus {
+  appId: string;
+  reviewState: string;
+  nextAction: string;
+  blockers: string[];
+  version: {
+    id: string;
+    version: string;
+    platform: string;
+    state: string;
+  } | null;
+}
+
+export async function getReviewStatus(appId: string): Promise<AscReviewStatus> {
+  return runAsc<AscReviewStatus>(["review", "status", "--app", appId]);
+}
+
+
