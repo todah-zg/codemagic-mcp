@@ -111,3 +111,40 @@ export async function getReviewStatus(appId: string): Promise<AscReviewStatus> {
 }
 
 
+export interface AscReleaseStatus {
+  app: {
+    id: string;
+    bundleId: string;
+    name: string;
+  };
+  summary: {
+    health: string;
+    nextAction: string;
+    blockers: string[];
+  };
+  builds: {
+    latest: {
+      version: string;
+      buildNumber: string;
+      processingState: string;
+      uploadedDate: string;
+    } | null;
+  };
+  testflight: {
+    betaReviewState: string;
+    submittedDate: string;
+  } | null;
+  appstore: {
+    version: string;
+    state: string;
+    platform: string;
+  } | null;
+  submission: {
+    inFlight: boolean;
+    blockingIssues: string[];
+  };
+}
+
+export async function getReleaseStatus(appId: string): Promise<AscReleaseStatus> {
+  return runAsc<AscReleaseStatus>(["status", "--app", appId]);
+}

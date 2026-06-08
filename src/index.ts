@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows } from "./codemagic.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus } from "./asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus } from "./asc.js";
 
 
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -188,6 +188,30 @@ server.registerTool("get_review_status", {
 });
 
 
+server.registerTool("get_release_status", {
+  description: "Get a full release pipeline status dashboard for an app, including latest build, TestFlight, App Store version, and submission state",
+  inputSchema: {
+    app_id: z.string().describe("The App Store Connect app ID"),
+  },
+}, async ({ app_id }) => {
+  const status = await getReleaseStatus(app_id);
+  const lines = [
+    `${status.app.name} (${status.app.bundleId})`,
+    `Health: ${status.summary.health.toUpperCase()}`,
+    `Next action: ${status.summary.nextAction}`,
+    ``,
+    `Latest build: ${status.builds.latest ? `v${status.builds.latest.version} build ${status.builds.latest.buildNumber} — ${status.builds.latest.processingState}` : "none"}`,
+    `TestFlight: ${status.testflight ? `${status.testflight.betaReviewState}` : "not submitted"}`,
+    `App Store: ${status.appstore ? `v${status.appstore.version} — ${status.appstore.state}` : "none"}`,
+    `Submission in flight: ${status.submission.inFlight ? "yes" : "no"}`,
+  ];
+  if (status.summary.blockers.length > 0) {
+    lines.push(`\nBlockers:\n${status.summary.blockers.map(b => `  - ${b}`).join("\n")}`);
+  }
+  return {
+    content: [{ type: "text", text: lines.join("\n") }],
+  };
+});
 
 
 
