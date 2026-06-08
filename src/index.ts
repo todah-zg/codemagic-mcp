@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { listApplications, listBuilds, getBuild } from "./codemagic.js";
+import { listApplications, listBuilds, getBuild, triggerBuild } from "./codemagic.js";
 import { z } from "zod";
 
 
@@ -20,9 +20,9 @@ const server = new McpServer({
 server.registerTool("ping", {
     description: "Check that the server is alive",
 }, async () => {
-  return {
-    content: [{ type: "text", text: "Codemagic MCP server is running." }]
-  };
+    return {
+        content: [{ type: "text", text: "Codemagic MCP server is running." }]
+    };
 });
 
 server.registerTool("list_applications", {
@@ -51,7 +51,7 @@ server.registerTool("list_builds", {
     const builds = await listBuilds(apiToken, team_id, { app_id, status, branch, workflow_id });
     const text = builds.map(b => `#${b.index} ${b.status} - ${b.branch ?? b.tag ?? "no branch"} (${b.id})`).join("\n");
     return {
-        content: [{ type: "text", text : text || "No builds found." }],
+        content: [{ type: "text", text: text || "No builds found." }],
     };
 });
 
@@ -75,6 +75,44 @@ server.registerTool("get_build", {
         content: [{ type: "text", text }],
     };
 });
+
+
+server.registerTool("trigger_build", {
+    description: "Trigger a new build on Codemagic. Requires an existing workflow defined in the repository's codemagic.yaml or in the Codemagic UI.",
+    annotations: {
+        readOnlyHint: false,
+        destructiveHint: false,
+    },
+    inputSchema: {
+        app_id: z.string().describe("The application ID"),
+        workflow_id: z.string().describe("The workflow ID to run"),
+        branch: z.string().optional().describe("Git branch to build"),
+        tag: z.string().optional().describe("Git tag to build"),
+        variables: z.record(z.string(), z.string()).optional().describe("Environment variables to inject into the build"),
+        groups: z.array(z.string()).optional().describe("Environment variable groups to include"),
+        labels: z.array(z.string()).optional().describe("Labels to attach to the build"),
+    },
+}, async ({ app_id, workflow_id, branch, tag, variables, groups, labels }) => {
+    if (!branch && !tag) {
+        return {
+            content: [{ type: "text", text: "Error: You must specify either a branch or a tag to build." }],
+            isError: true,
+        };
+    }
+    const buildId = await triggerBuild(apiToken, {
+        appId: app_id,
+        workflowId: workflow_id,
+        branch,
+        tag,
+        environment: { variables, groups },
+        labels: labels ?? [],
+    });
+    return {
+        content: [{ type: "text", text: `Build triggered successfully. Build ID: ${buildId}` }],
+    };
+});
+
+
 
 
 const transport = new StdioServerTransport();
