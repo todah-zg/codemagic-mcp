@@ -1,5 +1,9 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { writeFile, unlink } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 
 const execFileAsync = promisify(execFile);
 
@@ -147,4 +151,28 @@ export interface AscReleaseStatus {
 
 export async function getReleaseStatus(appId: string): Promise<AscReleaseStatus> {
   return runAsc<AscReleaseStatus>(["status", "--app", appId]);
+}
+
+export async function uploadToTestFlight(
+  appId: string,
+  ipaUrl: string,
+  betaGroup?: string
+): Promise<string> {
+  const tempPath = join(tmpdir(), `codemagic-${Date.now()}.ipa`);
+
+  const response = await fetch(ipaUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
+  }
+  const buffer = await response.arrayBuffer();
+  await writeFile(tempPath, Buffer.from(buffer));
+
+  try {
+    const args = ["builds", "upload", "--app", appId, "--ipa", tempPath, "--wait"];
+    if (betaGroup) args.push("--group", betaGroup);
+    const { stdout } = await execFileAsync("asc", args);
+    return stdout;
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
 }

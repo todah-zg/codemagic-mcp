@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild } from "./codemagic.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus } from "./asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight } from "./asc.js";
 import { validateCodemagicYaml, getYamlTemplate, listYamlTemplateTypes } from "./yaml.js";
 
 
@@ -259,6 +259,25 @@ server.registerTool("get_release_status", {
   }
   return {
     content: [{ type: "text", text: lines.join("\n") }],
+  };
+});
+
+
+server.registerTool("upload_to_testflight", {
+  description: "Download an IPA artifact from Codemagic and upload it to TestFlight via App Store Connect. Optionally distribute to a beta group after upload.",
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+  },
+  inputSchema: {
+    app_id: z.string().describe("The App Store Connect app ID"),
+    ipa_url: z.string().describe("The IPA download URL from a Codemagic build artifact"),
+    beta_group: z.string().optional().describe("TestFlight beta group name to distribute to after upload"),
+  },
+}, async ({ app_id, ipa_url, beta_group }) => {
+  const result = await uploadToTestFlight(app_id, ipa_url, beta_group);
+  return {
+    content: [{ type: "text", text: `Upload complete.\n${result}` }],
   };
 });
 
