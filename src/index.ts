@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows } from "./codemagic.js";
 import { z } from "zod";
+import { listAscApps } from "./asc.js";
 
 
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -124,6 +125,22 @@ server.registerTool("list_workflows", {
     content: [{ type: "text", text: text || "No workflows found." }],
   };
 });
+
+
+server.registerTool("list_asc_apps", {
+  description: "List applications in App Store Connect",
+}, async () => {
+  const apps = await listAscApps();
+  const text = apps.map(app => `${app.name} (${app.bundleId}) — ID: ${app.id}`).join("\n");
+  return {
+    content: [{ type: "text", text: text || "No apps found." }],
+  };
+});
+
+
+
+
+
 
 
 const transport = new StdioServerTransport();
