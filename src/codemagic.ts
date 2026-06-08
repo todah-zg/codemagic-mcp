@@ -120,3 +120,30 @@ export async function triggerBuild(apiToken: string, params: TriggerBuildParams)
     const data = await response.json() as { buildId: string };
     return data.buildId;
 }
+
+
+export interface Workflow {
+  id: string;
+  name: string;
+}
+
+export async function listWorkflows(apiToken: string, appId: string): Promise<Workflow[]> {
+    const response = await fetch(`${BASE_URL_V1}/apps/${appId}`, {
+        headers: { "x-auth-token": apiToken },
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as {
+        application: {
+            workflows: Record<string, { name: string }>;
+        };
+    };
+
+    return Object.entries(data.application.workflows).map(([id, workflow]) => ({
+        id,
+        name: workflow.name
+    }));
+}

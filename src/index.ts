@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { listApplications, listBuilds, getBuild, triggerBuild } from "./codemagic.js";
+import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows } from "./codemagic.js";
 import { z } from "zod";
 
 
@@ -112,7 +112,18 @@ server.registerTool("trigger_build", {
     };
 });
 
-
+server.registerTool("list_workflows", {
+  description: "List workflows for an application. Note: yaml-defined workflows only appear after their first build has run.",
+  inputSchema: {
+    app_id: z.string().describe("The application ID"),
+  },
+}, async ({ app_id }) => {
+  const workflows = await listWorkflows(apiToken, app_id);
+  const text = workflows.map(w => `${w.name} (${w.id})`).join("\n");
+  return {
+    content: [{ type: "text", text: text || "No workflows found." }],
+  };
+});
 
 
 const transport = new StdioServerTransport();
