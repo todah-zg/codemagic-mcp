@@ -147,3 +147,34 @@ export async function listWorkflows(apiToken: string, appId: string): Promise<Wo
         name: workflow.name
     }));
 }
+
+
+export async function addApplication(
+    apiToken: string,
+    repositoryUrl: string,
+    teamId?: string,
+    sshKey?: { data: string; passphrase: string | null }
+): Promise<{ id: string; appName: string }> {
+    const endpoint = sshKey ? `${BASE_URL_V1}/apps/new` : `${BASE_URL_V1}/apps`;
+    const body: Record<string, unknown> = { repositoryUrl };
+    if (teamId) body.teamId = teamId;
+    if (sshKey) body.sshKey = sshKey;
+
+    const response = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+            "x-auth-token": apiToken,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as {application?: { _id: string; appName: string }; _id?: string; appName?: string };
+    const id = data.application?._id ?? data._id ?? "";
+    const appName = data.application?.appName ?? data.appName ?? "";
+    return { id, appName };
+}

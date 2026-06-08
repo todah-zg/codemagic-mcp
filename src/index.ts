@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows } from "./codemagic.js";
+import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication } from "./codemagic.js";
 import { z } from "zod";
 import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus } from "./asc.js";
 
@@ -123,6 +123,30 @@ server.registerTool("list_workflows", {
   const text = workflows.map(w => `${w.name} (${w.id})`).join("\n");
   return {
     content: [{ type: "text", text: text || "No workflows found." }],
+  };
+});
+
+
+server.registerTool("add_application", {
+  description: "Add a new application to Codemagic by connecting a Git repository. Note: after adding, the app will show 'Set up build' in the Codemagic UI — this is expected. Builds can still be triggered via API using workflow IDs defined in the repository's codemagic.yaml.",
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+  },
+  inputSchema: {
+    repository_url: z.string().describe("SSH or HTTPS URL of the Git repository"),
+    team_id: z.string().optional().describe("Team ID to add the app to"),
+    ssh_key: z.string().optional().describe("Base64-encoded SSH private key for private repositories"),
+    ssh_passphrase: z.string().optional().describe("SSH key passphrase, if the key has one"),
+  },
+}, async ({ repository_url, team_id, ssh_key, ssh_passphrase }) => {
+  const sshKey = ssh_key
+    ? { data: ssh_key, passphrase: ssh_passphrase ?? null }
+    : undefined;
+
+  const app = await addApplication(apiToken, repository_url, team_id, sshKey);
+  return {
+    content: [{ type: "text", text: `Application added: ${app.appName} (${app.id})` }],
   };
 });
 
