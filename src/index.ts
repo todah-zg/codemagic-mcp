@@ -1,6 +1,13 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 
+const apiToken = process.env.CODEMAGIC_API_TOKEN;
+if (!apiToken) {
+    console.error("Error: CODEMAGIC_API_TOKEN environment variable is not set.");
+    process.exit(1);
+}
+
+
 const server = new McpServer({
     name: "codemagic-mcp",
     description: "A MCP server for Codemagic",
