@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication } from "./codemagic.js";
 import { z } from "zod";
 import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus } from "./asc.js";
+import { validateCodemagicYaml, getYamlTemplate, listYamlTemplateTypes } from "./yaml.js";
 
 
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -234,6 +235,53 @@ server.registerTool("get_release_status", {
   }
   return {
     content: [{ type: "text", text: lines.join("\n") }],
+  };
+});
+
+
+server.registerTool("validate_codemagic_yaml", {
+  description: "Validate a codemagic.yaml file against the official Codemagic JSON schema",
+  inputSchema: {
+    yaml_content: z.string().describe("The full contents of a codemagic.yaml file"),
+  },
+}, async ({ yaml_content }) => {
+  const result = await validateCodemagicYaml(yaml_content);
+  if (result.valid) {
+    return {
+      content: [{ type: "text", text: "Valid codemagic.yaml — no errors found." }],
+    };
+  }
+  const text = `Invalid codemagic.yaml — ${result.errors.length} error(s):\n${result.errors.map(e => `  - ${e}`).join("\n")}`;
+  return {
+    content: [{ type: "text", text }],
+    isError: true,
+  };
+});
+
+
+server.registerTool("get_yaml_template", {
+  description: "Get a starter codemagic.yaml template for a given project type. Templates cover build and signing only — publishing is handled separately via App Store Connect tools.",
+  inputSchema: {
+    project_type: z.enum([
+      "flutter",
+      "react-native",
+      "ios",
+      "android",
+      "unity",
+      "ionic-capacitor",
+      "ionic-cordova",
+    ]).describe("The project type to get a template for"),
+  },
+}, async ({ project_type }) => {
+  const template = getYamlTemplate(project_type);
+  if (!template) {
+    return {
+      content: [{ type: "text", text: `No template found for project type: ${project_type}` }],
+      isError: true,
+    };
+  }
+  return {
+    content: [{ type: "text", text: template }],
   };
 });
 
