@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication } from "./codemagic.js";
+import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild } from "./codemagic.js";
 import { z } from "zod";
 import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus } from "./asc.js";
 import { validateCodemagicYaml, getYamlTemplate, listYamlTemplateTypes } from "./yaml.js";
@@ -93,25 +93,49 @@ server.registerTool("trigger_build", {
         variables: z.record(z.string(), z.string()).optional().describe("Environment variables to inject into the build"),
         groups: z.array(z.string()).optional().describe("Environment variable groups to include"),
         labels: z.array(z.string()).optional().describe("Labels to attach to the build"),
+        yaml_content: z.string().optional().describe("A codemagic.yaml file content to use for this build. When provided, the yaml is passed inline and does not need to exist in the repository."),
     },
-}, async ({ app_id, workflow_id, branch, tag, variables, groups, labels }) => {
-    if (!branch && !tag) {
-        return {
-            content: [{ type: "text", text: "Error: You must specify either a branch or a tag to build." }],
-            isError: true,
-        };
-    }
-    const buildId = await triggerBuild(apiToken, {
-        appId: app_id,
-        workflowId: workflow_id,
-        branch,
-        tag,
-        environment: { variables, groups },
-        labels: labels ?? [],
-    });
+}, async ({ app_id, workflow_id, branch, tag, variables, groups, labels, yaml_content }) => {
+  if (!branch && !tag) {
+    return {
+      content: [{ type: "text", text: "Error: either branch or tag must be provided." }],
+      isError: true,
+    };
+  }
+  const buildId = await triggerBuild(apiToken, {
+    appId: app_id,
+    workflowId: workflow_id,
+    branch,
+    tag,
+    environment: { variables, groups },
+    labels: labels ?? [],
+  }, yaml_content);
     return {
         content: [{ type: "text", text: `Build triggered successfully. Build ID: ${buildId}` }],
     };
+});
+
+server.registerTool("wait_for_build", {
+  description: "Wait for a Codemagic build to complete. Polls until the build reaches a terminal state (finished, failed, canceled, timeout, skipped). Returns the final build details including artifacts.",
+  inputSchema: {
+    build_id: z.string().describe("The Codemagic build ID to wait for"),
+    interval_seconds: z.number().optional().describe("How often to poll in seconds (default: 30)"),
+  },
+}, async ({ build_id, interval_seconds }) => {
+  const build = await waitForBuild(apiToken, build_id, interval_seconds);
+  const artifactLines = build.artifacts.map(a =>
+    `  - ${a.name} (${a.type})\n    ${a.short_lived_download_url}`
+  ).join("\n");
+  const text = [
+    `Build #${build.index} — ${build.status}`,
+    `Branch: ${build.branch ?? build.tag ?? "none"}`,
+    `Finished: ${build.finished_at ?? "unknown"}`,
+    `Artifacts:\n${artifactLines || "  none"}`,
+  ].join("\n");
+  return {
+    content: [{ type: "text", text }],
+    isError: build.status !== "finished",
+  };
 });
 
 server.registerTool("list_workflows", {

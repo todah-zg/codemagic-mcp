@@ -14,7 +14,7 @@ export async function listApplications(apiToken: string, teamId?: string): Promi
         ? `/api/v3/teams/${teamId}/apps`
         : `/api/v3/user/apps`;
     const response = await fetch(`${BASE_URL_V3}${path}`, {
-        headers: {"x-auth-token": apiToken },
+        headers: { "x-auth-token": apiToken },
     });
 
     if (!response.ok) {
@@ -27,16 +27,16 @@ export async function listApplications(apiToken: string, teamId?: string): Promi
 
 
 export interface Build {
-  id: string;
-  app_id: string;
-  status: string;
-  index: number;
-  branch: string | null;
-  tag: string | null;
-  created_at: string;
-  started_at: string | null;
-  finished_at: string | null;
-  artifacts: Artifact[];
+    id: string;
+    app_id: string;
+    status: string;
+    index: number;
+    branch: string | null;
+    tag: string | null;
+    created_at: string;
+    started_at: string | null;
+    finished_at: string | null;
+    artifacts: Artifact[];
 }
 
 export async function listBuilds(
@@ -82,12 +82,12 @@ export async function getBuild(apiToken: string, buildId: string): Promise<Build
 }
 
 export interface Artifact {
-  name: string;
-  type: string;
-  size_in_bytes: number;
-  short_lived_download_url: string;
-  version_name: string | null;
-  version_code: string | null;
+    name: string;
+    type: string;
+    size_in_bytes: number;
+    short_lived_download_url: string;
+    version_name: string | null;
+    version_code: string | null;
 }
 
 
@@ -103,35 +103,49 @@ export interface TriggerBuildParams {
     labels: string[];
 }
 
-export async function triggerBuild(apiToken: string, params: TriggerBuildParams): Promise<string> {
-    const response = await fetch (`${BASE_URL_V1}/builds`, {
-        method: "POST",
-        headers: {
-            "x-auth-token": apiToken,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(params),
-    });
+export async function triggerBuild(
+  apiToken: string,
+  params: TriggerBuildParams,
+  yamlContent?: string
+): Promise<string> {
+  let body: BodyInit;
+  const headers: Record<string, string> = { "x-auth-token": apiToken };
 
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  if (yamlContent) {
+    const form = new FormData();
+    form.append("data", JSON.stringify(params));
+    form.append("config", new Blob([yamlContent], { type: "text/plain" }), "codemagic.yaml");
+    body = form;
+  } else {
+    body = JSON.stringify(params);
+    headers["Content-Type"] = "application/json";
+  }
 
-    const data = await response.json() as { buildId: string };
-    return data.buildId;
+  const response = await fetch(`${BASE_URL_V1}/builds`, {
+    method: "POST",
+    headers,
+    body,
+  });
+
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as { buildId: string };
+  return data.buildId;
 }
 
 
 export interface Workflow {
-  id: string;
-  name: string;
+    id: string;
+    name: string;
 }
 
 export async function listWorkflows(apiToken: string, appId: string): Promise<Workflow[]> {
     const response = await fetch(`${BASE_URL_V1}/apps/${appId}`, {
         headers: { "x-auth-token": apiToken },
     });
-    
+
     if (!response.ok) {
         throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
     }
@@ -168,13 +182,30 @@ export async function addApplication(
         },
         body: JSON.stringify(body),
     });
-    
+
     if (!response.ok) {
         throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
     }
 
-    const data = await response.json() as {application?: { _id: string; appName: string }; _id?: string; appName?: string };
+    const data = await response.json() as { application?: { _id: string; appName: string }; _id?: string; appName?: string };
     const id = data.application?._id ?? data._id ?? "";
     const appName = data.application?.appName ?? data.appName ?? "";
     return { id, appName };
+}
+
+
+const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
+
+export async function waitForBuild(
+  apiToken: string,
+  buildId: string,
+  intervalSeconds = 30
+): Promise<Build> {
+  while (true) {
+    const build = await getBuild(apiToken, buildId);
+    if (TERMINAL_STATUSES.has(build.status)) {
+      return build;
+    }
+    await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+  }
 }
