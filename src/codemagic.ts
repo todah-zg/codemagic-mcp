@@ -1,6 +1,14 @@
 const BASE_URL_V3 = "https://codemagic.io";
 const BASE_URL_V1 = "https://api.codemagic.io";
 
+const FETCH_TIMEOUT_MS = 10_000;
+
+async function buildApiError(response: Response): Promise<Error> {
+  const body = await response.text().catch(() => "");
+  const detail = body ? ` — ${body.slice(0, 200)}` : "";
+  return new Error(`Codemagic API error: ${response.status} ${response.statusText}${detail}`);
+}
+
 export interface Application {
   id: string;
   name: string;
@@ -20,12 +28,9 @@ export async function listApplications(apiToken: string, teamId?: string): Promi
     : `/api/v3/user/apps`;
   const response = await fetch(`${BASE_URL_V3}${path}`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: Application[] };
   return data.data;
 }
@@ -79,12 +84,9 @@ export async function listBuilds(
   const query = params.size > 0 ? `?${params}` : "";
   const response = await fetch(`${BASE_URL_V3}/api/v3/teams/${teamId}/builds${query}`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: Build[] };
   return data.data;
 }
@@ -97,12 +99,9 @@ export async function listBuilds(
 export async function getBuild(apiToken: string, buildId: string): Promise<Build> {
   const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: Build };
   return data.data;
 }
@@ -150,12 +149,9 @@ export async function triggerBuild(
     method: "POST",
     headers,
     body,
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { buildId: string };
   return data.buildId;
 }
@@ -174,21 +170,17 @@ export interface Workflow {
 export async function listWorkflows(apiToken: string, appId: string): Promise<Workflow[]> {
   const response = await fetch(`${BASE_URL_V1}/apps/${appId}`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as {
     application: {
       workflows: Record<string, { name: string }>;
     };
   };
-
   return Object.entries(data.application.workflows).map(([id, workflow]) => ({
     id,
-    name: workflow.name
+    name: workflow.name,
   }));
 }
 
@@ -219,15 +211,16 @@ export async function addApplication(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw await buildApiError(response);
 
   const data = await response.json() as { application?: { _id: string; appName: string }; _id?: string; appName?: string };
-  const id = data.application?._id ?? data._id ?? "";
-  const appName = data.application?.appName ?? data.appName ?? "";
+  const id = data.application?._id ?? data._id;
+  const appName = data.application?.appName ?? data.appName;
+  if (!id || !appName) {
+    throw new Error(`add_application: unexpected response shape — ${JSON.stringify(data)}`);
+  }
   return { id, appName };
 }
 
@@ -244,14 +237,24 @@ const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", 
 export async function waitForBuild(
   apiToken: string,
   buildId: string,
-  intervalSeconds = 30
+  intervalSeconds = 30,
+  maxWaitSeconds = 55
 ): Promise<Build> {
+  const deadline = Date.now() + maxWaitSeconds * 1000;
+
   while (true) {
     const build = await getBuild(apiToken, buildId);
     if (TERMINAL_STATUSES.has(build.status)) {
       return build;
     }
-    await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      throw new Error(
+        `Build ${buildId} is still "${build.status}" after ${maxWaitSeconds}s — ` +
+        `call wait_for_build again with the same build_id to continue polling.`
+      );
+    }
+    await new Promise(resolve => setTimeout(resolve, Math.min(intervalSeconds * 1000, remaining)));
   }
 }
 
@@ -277,10 +280,9 @@ export async function listVariableGroups(
     : `/api/v3/apps/${appId}/variable-groups`;
   const response = await fetch(`${BASE_URL_V3}${path}`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: VariableGroup[] };
   return data.data;
 }
@@ -314,10 +316,9 @@ export async function createVariableGroup(
       "Content-Type": "application/json",
     },
     body: JSON.stringify(body),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: VariableGroup };
   return data.data;
 }
@@ -347,10 +348,9 @@ export async function addVariable(
       secure: false,
       variables: [{ name, value }],
     }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw await buildApiError(response);
 }
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────
@@ -383,12 +383,10 @@ export function getWebhookUrl(appId: string): string {
 export async function listWebhooks(apiToken: string, appId: string): Promise<Webhook[]> {
   const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks`, {
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
-  const data = await response.json() as Webhook[];
-  return data;
+  if (!response.ok) throw await buildApiError(response);
+  return response.json() as Promise<Webhook[]>;
 }
 
 /**
@@ -401,8 +399,7 @@ export async function deleteWebhook(apiToken: string, appId: string, webhookId: 
   const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks/${webhookId}`, {
     method: "DELETE",
     headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw await buildApiError(response);
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { validateCodemagicYaml } from "../src/yaml.js";
+import { validateCodemagicYaml, _resetSchemaCache } from "../src/yaml.js";
 
 // A minimal schema that requires a top-level 'workflows' key —
 // enough to test valid vs. invalid without fetching the real schema.
@@ -12,9 +12,7 @@ const mockSchema = {
 };
 
 beforeEach(() => {
-  // Reset the module-level schema cache between tests so each test
-  // gets a fresh fetch call and the mock is always used.
-  vi.resetModules();
+  _resetSchemaCache();
 
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
     ok: true,

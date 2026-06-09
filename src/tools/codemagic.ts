@@ -115,13 +115,14 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("wait_for_build", {
-    description: "Wait for a Codemagic build to complete. Polls until the build reaches a terminal state (finished, failed, canceled, timeout, skipped). Returns the final build details including artifacts.",
+    description: "Wait for a Codemagic build to complete, polling until a terminal state is reached. Waits up to max_wait_seconds (default 55), then returns a 'still building' message — call again with the same build_id to continue polling. Returns final build details and artifact download URLs on completion.",
     inputSchema: {
       build_id: z.string().describe("The Codemagic build ID to wait for"),
       interval_seconds: z.number().optional().describe("How often to poll in seconds (default: 30)"),
+      max_wait_seconds: z.number().optional().describe("Maximum seconds to wait before returning 'still building' (default: 55). Call again with the same build_id to resume polling."),
     },
-  }, async ({ build_id, interval_seconds }) => {
-    const build = await waitForBuild(apiToken, build_id, interval_seconds);
+  }, async ({ build_id, interval_seconds, max_wait_seconds }) => {
+    const build = await waitForBuild(apiToken, build_id, interval_seconds, max_wait_seconds);
     const artifactLines = build.artifacts.map(a =>
       `  - ${a.name} (${a.type})\n    ${a.short_lived_download_url}`
     ).join("\n");
@@ -138,7 +139,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("add_application", {
-    description: "Add a new application to Codemagic by connecting a Git repository. Note: after adding, the app will show 'Set up build' in the Codemagic UI — this is expected. Builds can still be triggered via API using workflow IDs defined in the repository's codemagic.yaml.",
+    description: "Add a new application to Codemagic by connecting a Git repository. For private repositories, use HTTPS with a token in the URL, or add the deploy key via the Codemagic UI after connecting. Note: after adding, the app shows 'Set up build' in the UI — this is expected.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -146,14 +147,9 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     inputSchema: {
       repository_url: z.string().describe("SSH or HTTPS URL of the Git repository"),
       team_id: z.string().optional().describe("Team ID to add the app to"),
-      ssh_key: z.string().optional().describe("Base64-encoded SSH private key for private repositories"),
-      ssh_passphrase: z.string().optional().describe("SSH key passphrase, if the key has one"),
     },
-  }, async ({ repository_url, team_id, ssh_key, ssh_passphrase }) => {
-    const sshKey = ssh_key
-      ? { data: ssh_key, passphrase: ssh_passphrase ?? null }
-      : undefined;
-    const app = await addApplication(apiToken, repository_url, team_id, sshKey);
+  }, async ({ repository_url, team_id }) => {
+    const app = await addApplication(apiToken, repository_url, team_id);
     return {
       content: [{ type: "text", text: `Application added: ${app.appName} (${app.id})` }],
     };
@@ -241,15 +237,11 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       app_id: z.string().describe("The Codemagic app ID"),
     },
   }, async ({ app_id }) => {
-    try {
-      const webhooks = await listWebhooks(apiToken, app_id);
-      if (webhooks.length === 0) {
-        return { content: [{ type: "text", text: "No webhooks configured for this app." }] };
-      }
-      return { content: [{ type: "text", text: JSON.stringify(webhooks, null, 2) }] };
-    } catch (e) {
-      return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+    const webhooks = await listWebhooks(apiToken, app_id);
+    if (webhooks.length === 0) {
+      return { content: [{ type: "text", text: "No webhooks configured for this app." }] };
     }
+    return { content: [{ type: "text", text: JSON.stringify(webhooks, null, 2) }] };
   });
 
   server.registerTool("delete_webhook", {
@@ -260,12 +252,8 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       webhook_id: z.string().describe("The webhook ID to delete (from list_webhooks)"),
     },
   }, async ({ app_id, webhook_id }) => {
-    try {
-      await deleteWebhook(apiToken, app_id, webhook_id);
-      return { content: [{ type: "text", text: `Webhook ${webhook_id} deleted.` }] };
-    } catch (e) {
-      return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
-    }
+    await deleteWebhook(apiToken, app_id, webhook_id);
+    return { content: [{ type: "text", text: `Webhook ${webhook_id} deleted.` }] };
   });
 
 }

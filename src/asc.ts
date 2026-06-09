@@ -1,10 +1,18 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile, unlink } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
+
+const EXEC_BUFFER = 32 * 1024 * 1024;     // 32 MB — covers large build/app lists
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000; // 30 min — upload + Apple processing wait
+const CLI_TIMEOUT_MS = 60_000;             // 60 s  — list / status commands
 
 /**
  * Run an `asc` CLI command and parse its JSON output.
@@ -15,7 +23,10 @@ const execFileAsync = promisify(execFile);
  */
 export async function runAsc<T>(args: string[]): Promise<T> {
   try {
-    const { stdout } = await execFileAsync("asc", [...args, "--output", "json"]);
+    const { stdout } = await execFileAsync("asc", [...args, "--output", "json"], {
+      maxBuffer: EXEC_BUFFER,
+      timeout: CLI_TIMEOUT_MS,
+    });
     return JSON.parse(stdout) as T;
   } catch (error) {
     throw new Error(`asc ${args[0]} failed: ${error instanceof Error ? error.message : String(error)}`);
@@ -185,21 +196,24 @@ export async function uploadToTestFlight(
   ipaUrl: string,
   betaGroup?: string
 ): Promise<string> {
-  const tempPath = join(tmpdir(), `codemagic-${Date.now()}.ipa`);
+  const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
 
   const response = await fetch(ipaUrl);
   if (!response.ok) {
     throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
   }
-  const buffer = await response.arrayBuffer();
-  await writeFile(tempPath, Buffer.from(buffer));
+  if (!response.body) throw new Error("IPA response body is empty");
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
 
   try {
     const args = ["builds", "upload", "--app", appId, "--ipa", tempPath, "--wait"];
     if (betaGroup) args.push("--group", betaGroup);
-    const { stdout } = await execFileAsync("asc", args);
+    const { stdout } = await execFileAsync("asc", args, {
+      maxBuffer: EXEC_BUFFER,
+      timeout: UPLOAD_TIMEOUT_MS,
+    });
     return stdout;
   } finally {
-    await unlink(tempPath).catch(() => {});
+    await unlink(tempPath).catch(() => { });
   }
 }

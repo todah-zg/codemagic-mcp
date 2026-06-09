@@ -1,30 +1,35 @@
-import Ajv from "ajv";
+import { Ajv } from "ajv";
 import * as yaml from "js-yaml";
 export { getYamlTemplate, listYamlTemplateTypes } from "./templates.js";
 
 const ajv = new Ajv({ allErrors: true });
 
-let schema: object | null = null;
-
+let schemaPromise: Promise<object> | null = null;
 /**
  * Fetch and cache the official Codemagic JSON schema.
  * The schema is fetched once and reused for subsequent validations.
  */
 async function getSchema(): Promise<object> {
-  if (schema) return schema;
-  const response = await fetch("https://codemagic.io/codemagic-schema.json");
-  if (!response.ok) {
-    throw new Error(`Failed to fetch schema: ${response.status} ${response.statusText}`);
+  if (!schemaPromise) {
+    schemaPromise = fetch("https://codemagic.io/codemagic-schema.json").then(async response => {
+      if (!response.ok) {
+        throw new Error(`Failed to fetch schema: ${response.status} ${response.statusText}`);
+      }
+      return response.json() as Promise<object>;
+    });
   }
-  schema = await response.json() as object;
-  return schema;
+  return schemaPromise;
+}
+
+/** Reset the schema cache — for use in tests only. */
+export function _resetSchemaCache(): void {
+  schemaPromise = null;
 }
 
 export interface ValidationResult {
   valid: boolean;
   errors: string[];
 }
-
 /**
  * Validate a codemagic.yaml string against the official Codemagic JSON schema.
  * The schema is fetched from codemagic.io on first call and cached for subsequent calls.
@@ -48,6 +53,6 @@ export async function validateCodemagicYaml(yamlContent: string): Promise<Valida
 
   return {
     valid,
-    errors: valid ? [] : (validate.errors ?? []).map(e => `${e.dataPath} ${e.message}`),
+    errors: valid ? [] : (validate.errors ?? []).map(e => `${e.instancePath} ${e.message ?? ""}`.trim()),
   };
 }

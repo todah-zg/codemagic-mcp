@@ -19,6 +19,7 @@
     "type": "git",
     "url": "git+https://github.com/todah-zg/codemagic-mcp.git"
   },
+  "engines": { "node": ">=20" },
   "type": "module",
   "scripts": {
     "build": "tsc",
@@ -32,8 +33,9 @@
   ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "ajv": "^6.15.0",
-    "js-yaml": "^4.2.0"
+    "ajv": "^8.0.0",
+    "js-yaml": "^4.2.0",
+    "zod": "^3.25.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",

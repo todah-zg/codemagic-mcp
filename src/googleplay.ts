@@ -1,11 +1,18 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { writeFile, unlink } from "node:fs/promises";
+import { createWriteStream } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
+import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
+const EXEC_BUFFER = 32 * 1024 * 1024;
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
+const CLI_TIMEOUT_MS = 60_000;
 
 /**
  * Run a `google-play` CLI command and parse its JSON output.
@@ -18,10 +25,14 @@ const execFileAsync = promisify(execFile);
  */
 async function runGooglePlay<T>(args: string[]): Promise<T> {
   try {
-    const { stdout } = await execFileAsync("google-play", [...args, "--json"]);
-    const jsonStart = stdout.search(/[\[{]/);
-    if (jsonStart === -1) throw new Error("No JSON found in output");
-    return JSON.parse(stdout.slice(jsonStart)) as T;
+    const { stdout } = await execFileAsync("google-play", [...args, "--json"], {
+      maxBuffer: EXEC_BUFFER,
+      timeout: CLI_TIMEOUT_MS,
+    });
+    const lines = stdout.split("\n");
+    const startIdx = lines.findIndex(line => /^[\[{]/.test(line.trim()));
+    if (startIdx === -1) throw new Error("No JSON found in output");
+    return JSON.parse(lines.slice(startIdx).join("\n")) as T;
   } catch (error) {
     throw new Error(
       `google-play ${args[0]} failed: ${error instanceof Error ? error.message : String(error)}`
@@ -84,14 +95,14 @@ export async function uploadToGooglePlay(
   releaseNotesLanguage?: string,
   draft?: boolean,
 ): Promise<string> {
-  const tempPath = join(tmpdir(), `codemagic-${Date.now()}.aab`);
+  const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
 
   const response = await fetch(aabUrl);
   if (!response.ok) {
     throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
   }
-  const buffer = await response.arrayBuffer();
-  await writeFile(tempPath, Buffer.from(buffer));
+  if (!response.body) throw new Error("AAB response body is empty");
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
 
   try {
     const args = ["bundles", "publish", "--bundle", tempPath, "--track", track];
