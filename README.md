@@ -97,6 +97,43 @@ The config file is at:
 - **macOS:** `~/Library/Application Support/Claude/claude_desktop_config.json`
 - **Windows:** `%APPDATA%\Claude\claude_desktop_config.json`
 
+## Using with Claude Desktop
+
+### Connecting the server
+
+After adding the server to `claude_desktop_config.json` (see above), **restart Claude Desktop**. Look for the MCP tools icon (a hammer symbol) at the bottom of the input field — click it to confirm the server is connected and its tools are listed.
+
+If the server does not appear, check that the `CODEMAGIC_API_TOKEN` environment variable is set correctly in the config and that the path to `dist/index.js` is absolute and correct.
+
+### Workflow prompts
+
+Once connected, type `/` in the Claude Desktop input field to open the command picker. You will see three workflow prompts from this server:
+
+| Prompt | When to use |
+|--------|-------------|
+| `/onboarding` | Starting from scratch — connect a repo, get a first build passing |
+| `/android_release` | Build a signed AAB and publish it to Google Play |
+| `/ios_release` | Build a signed IPA and upload it to TestFlight |
+
+Select a prompt and Claude will receive a step-by-step playbook and begin executing the workflow using the available tools.
+
+### Example conversations
+
+You can also describe what you want in plain language — Claude will select the right tools automatically:
+
+> "I have a Flutter app at github.com/example/myapp. Set it up on Codemagic and get a first build running."
+
+> "Trigger a release build for my Android app, version 2.1.0. The last build number on Google Play was 41."
+
+> "What is the current App Store review status for my iOS app?"
+
+### Config file location
+
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Windows | `%APPDATA%\Claude\claude_desktop_config.json` |
+
 ## Tools
 
 ### Codemagic
