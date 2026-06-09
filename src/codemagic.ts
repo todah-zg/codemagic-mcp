@@ -2,284 +2,282 @@ const BASE_URL_V3 = "https://codemagic.io";
 const BASE_URL_V1 = "https://api.codemagic.io";
 
 export interface Application {
-    id: string;
-    name: string;
-    icon_url: string;
-    last_build_id: string;
-    archived: boolean;
+  id: string;
+  name: string;
+  icon_url: string;
+  last_build_id: string;
+  archived: boolean;
 }
 
 export async function listApplications(apiToken: string, teamId?: string): Promise<Application[]> {
-    const path = teamId
-        ? `/api/v3/teams/${teamId}/apps`
-        : `/api/v3/user/apps`;
-    const response = await fetch(`${BASE_URL_V3}${path}`, {
-        headers: { "x-auth-token": apiToken },
-    });
+  const path = teamId
+    ? `/api/v3/teams/${teamId}/apps`
+    : `/api/v3/user/apps`;
+  const response = await fetch(`${BASE_URL_V3}${path}`, {
+    headers: { "x-auth-token": apiToken },
+  });
 
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
 
-    const data = await response.json() as { data: Application[] };
-    return data.data;
-}
-
-
-export interface Build {
-    id: string;
-    app_id: string;
-    status: string;
-    index: number;
-    branch: string | null;
-    tag: string | null;
-    created_at: string;
-    started_at: string | null;
-    finished_at: string | null;
-    artifacts: Artifact[];
-}
-
-export async function listBuilds(
-    apiToken: string,
-    teamId: string,
-    filters?: {
-        app_id?: string;
-        status?: string;
-        branch?: string;
-        workflow_id?: string;
-    }
-): Promise<Build[]> {
-    const params = new URLSearchParams();
-    if (filters?.app_id) params.set("app_id", filters.app_id);
-    if (filters?.status) params.set("status", filters.status);
-    if (filters?.branch) params.set("branch", filters.branch);
-    if (filters?.workflow_id) params.set("workflow_id", filters.workflow_id);
-
-    const query = params.size > 0 ? `?{params}` : "";
-    const response = await fetch(`${BASE_URL_V3}/api/v3/teams/${teamId}/builds${query}`, {
-        headers: { "x-auth-token": apiToken },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as { data: Build[] };
-    return data.data;
-}
-
-export async function getBuild(apiToken: string, buildId: string): Promise<Build> {
-    const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}`, {
-        headers: { "x-auth-token": apiToken },
-    });
-
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json() as { data: Build };
-    return data.data;
+  const data = await response.json() as { data: Application[] };
+  return data.data;
 }
 
 export interface Artifact {
-    name: string;
-    type: string;
-    size_in_bytes: number;
-    short_lived_download_url: string;
-    version_name: string | null;
-    version_code: string | null;
+  name: string;
+  type: string;
+  size_in_bytes: number;
+  short_lived_download_url: string;
+  version_name: string | null;
+  version_code: string | null;
+}
+
+export interface Build {
+  id: string;
+  app_id: string;
+  status: string;
+  index: number;
+  branch: string | null;
+  tag: string | null;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+  artifacts: Artifact[];
+}
+
+export async function listBuilds(
+  apiToken: string,
+  teamId: string,
+  filters?: {
+    app_id?: string;
+    status?: string;
+    branch?: string;
+    workflow_id?: string;
+  }
+): Promise<Build[]> {
+  const params = new URLSearchParams();
+  if (filters?.app_id) params.set("app_id", filters.app_id);
+  if (filters?.status) params.set("status", filters.status);
+  if (filters?.branch) params.set("branch", filters.branch);
+  if (filters?.workflow_id) params.set("workflow_id", filters.workflow_id);
+
+  const query = params.size > 0 ? `?${params}` : "";
+  const response = await fetch(`${BASE_URL_V3}/api/v3/teams/${teamId}/builds${query}`, {
+    headers: { "x-auth-token": apiToken },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as { data: Build[] };
+  return data.data;
+}
+
+export async function getBuild(apiToken: string, buildId: string): Promise<Build> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}`, {
+    headers: { "x-auth-token": apiToken },
+  });
+
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+
+  const data = await response.json() as { data: Build };
+  return data.data;
 }
 
 
 export interface TriggerBuildParams {
-    appId: string;
-    workflowId: string;
-    branch?: string;
-    tag?: string;
-    environment?: {
-        variables?: Record<string, string>;
-        groups?: string[];
-    };
-    labels: string[];
+  appId: string;
+  workflowId: string;
+  branch?: string;
+  tag?: string;
+  environment?: {
+    variables?: Record<string, string>;
+    groups?: string[];
+  };
+  labels: string[];
 }
 
 export async function triggerBuild(
-    apiToken: string,
-    params: TriggerBuildParams,
-    yamlContent?: string
+  apiToken: string,
+  params: TriggerBuildParams,
+  yamlContent?: string
 ): Promise<string> {
-    let body: BodyInit;
-    const headers: Record<string, string> = { "x-auth-token": apiToken };
+  let body: BodyInit;
+  const headers: Record<string, string> = { "x-auth-token": apiToken };
 
-    if (yamlContent) {
-        const form = new FormData();
-        form.append("data", JSON.stringify(params));
-        form.append("config", new Blob([yamlContent], { type: "text/plain" }), "codemagic.yaml");
-        body = form;
-    } else {
-        body = JSON.stringify(params);
-        headers["Content-Type"] = "application/json";
-    }
+  if (yamlContent) {
+    const form = new FormData();
+    form.append("data", JSON.stringify(params));
+    form.append("config", new Blob([yamlContent], { type: "text/plain" }), "codemagic.yaml");
+    body = form;
+  } else {
+    body = JSON.stringify(params);
+    headers["Content-Type"] = "application/json";
+  }
 
-    const response = await fetch(`${BASE_URL_V1}/builds`, {
-        method: "POST",
-        headers,
-        body,
-    });
+  const response = await fetch(`${BASE_URL_V1}/builds`, {
+    method: "POST",
+    headers,
+    body,
+  });
 
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
 
-    const data = await response.json() as { buildId: string };
-    return data.buildId;
+  const data = await response.json() as { buildId: string };
+  return data.buildId;
 }
 
 
 export interface Workflow {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
 }
 
 export async function listWorkflows(apiToken: string, appId: string): Promise<Workflow[]> {
-    const response = await fetch(`${BASE_URL_V1}/apps/${appId}`, {
-        headers: { "x-auth-token": apiToken },
-    });
+  const response = await fetch(`${BASE_URL_V1}/apps/${appId}`, {
+    headers: { "x-auth-token": apiToken },
+  });
 
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
 
-    const data = await response.json() as {
-        application: {
-            workflows: Record<string, { name: string }>;
-        };
+  const data = await response.json() as {
+    application: {
+      workflows: Record<string, { name: string }>;
     };
+  };
 
-    return Object.entries(data.application.workflows).map(([id, workflow]) => ({
-        id,
-        name: workflow.name
-    }));
+  return Object.entries(data.application.workflows).map(([id, workflow]) => ({
+    id,
+    name: workflow.name
+  }));
 }
 
-
 export async function addApplication(
-    apiToken: string,
-    repositoryUrl: string,
-    teamId?: string,
-    sshKey?: { data: string; passphrase: string | null }
+  apiToken: string,
+  repositoryUrl: string,
+  teamId?: string,
+  sshKey?: { data: string; passphrase: string | null }
 ): Promise<{ id: string; appName: string }> {
-    const endpoint = sshKey ? `${BASE_URL_V1}/apps/new` : `${BASE_URL_V1}/apps`;
-    const body: Record<string, unknown> = { repositoryUrl };
-    if (teamId) body.teamId = teamId;
-    if (sshKey) body.sshKey = sshKey;
+  const endpoint = sshKey ? `${BASE_URL_V1}/apps/new` : `${BASE_URL_V1}/apps`;
+  const body: Record<string, unknown> = { repositoryUrl };
+  if (teamId) body.teamId = teamId;
+  if (sshKey) body.sshKey = sshKey;
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-            "x-auth-token": apiToken,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-    });
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers: {
+      "x-auth-token": apiToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
 
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
 
-    const data = await response.json() as { application?: { _id: string; appName: string }; _id?: string; appName?: string };
-    const id = data.application?._id ?? data._id ?? "";
-    const appName = data.application?.appName ?? data.appName ?? "";
-    return { id, appName };
+  const data = await response.json() as { application?: { _id: string; appName: string }; _id?: string; appName?: string };
+  const id = data.application?._id ?? data._id ?? "";
+  const appName = data.application?.appName ?? data.appName ?? "";
+  return { id, appName };
 }
 
 
 const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
 
 export async function waitForBuild(
-    apiToken: string,
-    buildId: string,
-    intervalSeconds = 30
+  apiToken: string,
+  buildId: string,
+  intervalSeconds = 30
 ): Promise<Build> {
-    while (true) {
-        const build = await getBuild(apiToken, buildId);
-        if (TERMINAL_STATUSES.has(build.status)) {
-            return build;
-        }
-        await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+  while (true) {
+    const build = await getBuild(apiToken, buildId);
+    if (TERMINAL_STATUSES.has(build.status)) {
+      return build;
     }
+    await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
+  }
 }
 
 
 export interface VariableGroup {
-    id: string;
-    name: string;
+  id: string;
+  name: string;
 }
 
 export async function listVariableGroups(
-    apiToken: string,
-    teamId?: string,
-    appId?: string
+  apiToken: string,
+  teamId?: string,
+  appId?: string
 ): Promise<VariableGroup[]> {
-    const path = teamId
-        ? `/api/v3/teams/${teamId}/variable-groups`
-        : `/api/v3/apps/${appId}/variable-groups`;
-    const response = await fetch(`${BASE_URL_V3}${path}`, {
-        headers: { "x-auth-token": apiToken },
-    });
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
-    const data = await response.json() as { data: VariableGroup[] };
-    return data.data;
+  const path = teamId
+    ? `/api/v3/teams/${teamId}/variable-groups`
+    : `/api/v3/apps/${appId}/variable-groups`;
+  const response = await fetch(`${BASE_URL_V3}${path}`, {
+    headers: { "x-auth-token": apiToken },
+  });
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+  const data = await response.json() as { data: VariableGroup[] };
+  return data.data;
 }
 
 export async function createVariableGroup(
-    apiToken: string,
-    name: string,
-    teamId?: string,
-    appId?: string
+  apiToken: string,
+  name: string,
+  teamId?: string,
+  appId?: string
 ): Promise<VariableGroup> {
-    const path = teamId
-        ? `/api/v3/teams/${teamId}/variable-groups`
-        : `/api/v3/apps/${appId}/variable-groups`;
-    const body: Record<string, unknown> = { name };
-    if (teamId) {
-        body.advanced_security = { enabled: false, selected_apps: [] };
-    }
-    const response = await fetch(`${BASE_URL_V3}${path}`, {
-        method: "POST",
-        headers: {
-            "x-auth-token": apiToken,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify(body),
-    });
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
-    const data = await response.json() as { data: VariableGroup };
-    return data.data;
+  const path = teamId
+    ? `/api/v3/teams/${teamId}/variable-groups`
+    : `/api/v3/apps/${appId}/variable-groups`;
+  const body: Record<string, unknown> = { name };
+  if (teamId) {
+    body.advanced_security = { enabled: false, selected_apps: [] };
+  }
+  const response = await fetch(`${BASE_URL_V3}${path}`, {
+    method: "POST",
+    headers: {
+      "x-auth-token": apiToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+  const data = await response.json() as { data: VariableGroup };
+  return data.data;
 }
 
 export async function addVariable(
-    apiToken: string,
-    groupId: string,
-    name: string,
-    value: string
+  apiToken: string,
+  groupId: string,
+  name: string,
+  value: string
 ): Promise<void> {
-    const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, {
-        method: "POST",
-        headers: {
-            "x-auth-token": apiToken,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-            secure: false,
-            variables: [{ name, value }],
-        }),
-    });
-    if (!response.ok) {
-        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-    }
+  const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, {
+    method: "POST",
+    headers: {
+      "x-auth-token": apiToken,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      secure: false,
+      variables: [{ name, value }],
+    }),
+  });
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
 }

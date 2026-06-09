@@ -18,38 +18,38 @@ export async function runAsc<T>(args: string[]): Promise<T> {
 
 
 export interface AscAppRaw {
-    id: string;
-    attributes: {
-        name: string;
-        bundleId: string;
-        sku: string;
-    };
+  id: string;
+  attributes: {
+    name: string;
+    bundleId: string;
+    sku: string;
+  };
 }
 
 export interface AscApp {
-    id: string;
-    name: string;
-    bundleId: string;
+  id: string;
+  name: string;
+  bundleId: string;
 }
 
 export async function listAscApps(): Promise<AscApp[]> {
-    const response = await runAsc<{ data: AscAppRaw[] }>(["apps", "list"]);
-    return response.data.map(app => ({
-        id: app.id,
-        name: app.attributes.name,
-        bundleId: app.attributes.bundleId,
-    }));
+  const response = await runAsc<{ data: AscAppRaw[] }>(["apps", "list"]);
+  return response.data.map(app => ({
+    id: app.id,
+    name: app.attributes.name,
+    bundleId: app.attributes.bundleId,
+  }));
 }
 
 
 interface AscBuildRaw {
-    id: string;
-    attributes: {
-        version: string;
-        uploadedDate: string;
-        processingState: string;
-        expired: boolean;
-    };
+  id: string;
+  attributes: {
+    version: string;
+    uploadedDate: string;
+    processingState: string;
+    expired: boolean;
+  };
 }
 
 export interface AscBuild {
@@ -173,6 +173,6 @@ export async function uploadToTestFlight(
     const { stdout } = await execFileAsync("asc", args);
     return stdout;
   } finally {
-    await unlink(tempPath).catch(() => {});
+    await unlink(tempPath).catch(() => { });
   }
 }

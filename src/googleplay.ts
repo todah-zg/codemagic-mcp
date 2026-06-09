@@ -83,6 +83,6 @@ export async function uploadToGooglePlay(
     const result = await runGooglePlay<unknown>(args);
     return JSON.stringify(result, null, 2);
   } finally {
-    await unlink(tempPath).catch(() => {});
+    await unlink(tempPath).catch(() => { });
   }
 }

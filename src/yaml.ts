@@ -7,18 +7,18 @@ const ajv = new Ajv({ allErrors: true });
 let schema: object | null = null;
 
 async function getSchema(): Promise<object> {
-    if (schema) return schema;
-    const response = await fetch("https://codemagic.io/codemagic-schema.json");
-    if (!response.ok) {
-        throw new Error(`Failed to fetch schema: ${response.status} ${response.statusText}`);
-    }
-    schema = await response.json() as object;
-    return schema;
+  if (schema) return schema;
+  const response = await fetch("https://codemagic.io/codemagic-schema.json");
+  if (!response.ok) {
+    throw new Error(`Failed to fetch schema: ${response.status} ${response.statusText}`);
+  }
+  schema = await response.json() as object;
+  return schema;
 }
 
 export interface ValidationResult {
-    valid: boolean;
-    errors: string[];
+  valid: boolean;
+  errors: string[];
 }
 
 export async function validateCodemagicYaml(yamlContent: string): Promise<ValidationResult> {
