@@ -469,6 +469,14 @@ server.registerTool("add_variable", {
 });
 
 
+server.registerTool("list_yaml_template_types", {
+  description: "List all available codemagic.yaml template types",
+}, async () => {
+  const types = listYamlTemplateTypes();
+  return {
+    content: [{ type: "text", text: types.join("\n") }],
+  };
+});
 
 
 const transport = new StdioServerTransport();
