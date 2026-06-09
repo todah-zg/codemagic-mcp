@@ -101,7 +101,7 @@ The config file is at:
 
 ### Connecting the server
 
-After adding the server to `claude_desktop_config.json` (see above), **restart Claude Desktop**. Look for the MCP tools icon (a hammer symbol) at the bottom of the input field — click it to confirm the server is connected and its tools are listed.
+To verify the server is connected, open a new conversation and ask: *"ping the codemagic mcp server"*. If connected, Claude will call the `ping` tool and respond with "Codemagic MCP server is running." If not connected, check that the path in `args` is correct and that all required environment variables are set, then restart Claude Desktop with Cmd+Q (not just closing the window).
 
 If the server does not appear, check that the `CODEMAGIC_API_TOKEN` environment variable is set correctly in the config and that the path to `dist/index.js` is absolute and correct.
 
