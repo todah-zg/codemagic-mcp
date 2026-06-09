@@ -28,13 +28,18 @@ export function registerYamlTools(server: McpServer): void {
     description: "Get a starter codemagic.yaml template for a given project type. Templates cover build and signing only — publishing is handled separately via App Store Connect tools.",
     inputSchema: {
       project_type: z.enum([
-        "flutter",
-        "react-native",
-        "ios",
         "android",
-        "unity",
+        "ios",
+        "flutter",
+        "flutter-native",
+        "react-native",
         "ionic-capacitor",
         "ionic-cordova",
+        "kmm",
+        "snap",
+        "unity",
+        "unity-oculus",
+        "dotnet-maui",
       ]).describe("The project type to get a template for"),
     },
   }, async ({ project_type }) => {

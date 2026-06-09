@@ -12,9 +12,9 @@ The server exposes tools across three domains:
 
 The intended end-to-end flows are:
 
-**iOS:** `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_testflight`
+**iOS:** `list_asc_builds` (get next build number) → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_testflight`
 
-**Android:** `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_google_play`
+**Android:** `list_google_play_tracks` (get next build number) → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_google_play`
 
 ## Prerequisites
 
@@ -144,7 +144,7 @@ The config file is at:
 | Tool | Description |
 |------|-------------|
 | `validate_codemagic_yaml` | Validate a `codemagic.yaml` against the official Codemagic JSON schema |
-| `get_yaml_template` | Get a starter `codemagic.yaml` for flutter, react-native, ios, android, unity, ionic-capacitor, or ionic-cordova |
+| `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, or dotnet-maui |
 | `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
 
 ## Project structure
@@ -170,6 +170,7 @@ The `src/tools/` modules wire those functions up as MCP tools — input schemas,
 ## Notes
 
 - **Inline YAML:** `trigger_build` accepts an optional `yaml_content` parameter. When provided, the YAML is uploaded alongside the build request and does not need to exist in the repository. Useful for agent-generated configurations.
+- **Build numbers:** Templates use `$BUILD_NUMBER` and `$VERSION_NAME` as plain variables — no store lookups happen inside the YAML. The agent determines the correct values via `list_asc_builds` or `list_google_play_tracks` before triggering, then passes them through the `variables` parameter of `trigger_build`.
 - **Signing:** iOS signing happens on the Codemagic build machine (macOS + keychain). The MCP server never handles signing identities directly.
 - **Team vs. personal account:** `list_applications` and `list_builds` accept an optional `team_id`. Without it, they operate on the authenticated user's personal account.
 - **Variable groups and secrets:** `add_variable` only creates non-secret variables. Secret values (API keys, certificates, tokens) should be added directly in the Codemagic UI — secrets should never pass through the agent. Once set up, reference groups by name in `trigger_build` via the `groups` parameter.

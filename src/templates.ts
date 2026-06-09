@@ -1,52 +1,264 @@
+// codemagic.yaml starter templates — one per project type.
+//
+// Design conventions:
+//   - Build and signing only. No publishing sections (handled via ASC/Google Play tools).
+//   - BUILD_NUMBER and VERSION_NAME are injected as variables at trigger time.
+//     The AI agent should determine these values via list_asc_builds / list_google_play_tracks
+//     before calling trigger_build, then pass them in the `variables` parameter.
+//   - Every line that the user must change is annotated with "# Replace with..."
+//   - Placeholder package names / bundle IDs use com.example.myapp consistently.
+//   - Android-only workflows use linux_x2 (cheaper, no Mac needed).
+//   - iOS or combined workflows use mac_mini_m2.
+//   - Unity workflows use mac_mini_m2 (builds both Android and iOS targets).
+//   - The `publishing.scripts` block in Unity templates is for license deactivation,
+//     not app distribution — it runs post-build regardless of outcome.
+
 export const TEMPLATES: Record<string, string> = {
-  flutter: `workflows:
-  flutter-workflow:
-    name: Flutter Workflow
+
+  // ─── Native Android ──────────────────────────────────────────────────────────
+
+  android: `# Native Android — build and sign an AAB for Google Play distribution.
+#
+# Before triggering:
+#   1. Add a keystore in Codemagic → Code signing → Android keystores.
+#      The reference name below must match what you entered there.
+#   2. Determine the next BUILD_NUMBER and VERSION_NAME using the google-play CLI
+#      (list_google_play_tracks), then pass them as variables to trigger_build.
+workflows:
+  android-workflow:
+    name: Native Android
     max_build_duration: 120
-    instance_type: mac_mini_m2
+    instance_type: linux_x2
     environment:
       android_signing:
         - keystore_reference
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
+    scripts:
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+      - name: Build Android release
+        script: |
+          ./gradlew bundleRelease \\
+            -PversionCode=$BUILD_NUMBER \\
+            -PversionName=$VERSION_NAME
+    artifacts:
+      - app/build/outputs/**/*.aab
+      - app/build/outputs/**/*.apk`,
+
+  // ─── Native iOS ──────────────────────────────────────────────────────────────
+
+  ios: `# Native iOS — build and sign an IPA for App Store distribution.
+#
+# Before triggering:
+#   1. Add a distribution certificate and provisioning profile in
+#      Codemagic → Code signing → iOS certificates.
+#   2. Determine the next BUILD_NUMBER and VERSION_NAME using the asc CLI
+#      (list_asc_builds), then pass them as variables to trigger_build.
+workflows:
+  ios-workflow:
+    name: Native iOS
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: io.codemagic.fluttersample
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
       vars:
-        PACKAGE_NAME: "io.codemagic.fluttersample"
-        BUNDLE_ID: "io.codemagic.fluttersample"
+        XCODE_WORKSPACE: MyApp.xcworkspace       # Replace with your .xcworkspace filename
+        XCODE_SCHEME: MyApp                      # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER              # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME              # Injected via trigger_build variables
+    scripts:
+      - name: Install CocoaPods dependencies
+        script: |
+          pod install
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd $CM_BUILD_DIR
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \\
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \\
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM`,
+
+  // ─── Flutter ─────────────────────────────────────────────────────────────────
+
+  flutter: `# Flutter — separate workflows for Android AAB and iOS IPA.
+# Trigger them independently with the appropriate BUILD_NUMBER/VERSION_NAME.
+#
+# Before triggering android:
+#   1. Add a keystore in Codemagic → Code signing → Android keystores.
+#   2. Determine build number via list_google_play_tracks.
+#
+# Before triggering ios:
+#   1. Add signing identity in Codemagic → Code signing → iOS certificates.
+#   2. Determine build number via list_asc_builds.
+workflows:
+  flutter-android:
+    name: Flutter Android
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      android_signing:
+        - keystore_reference
       flutter: stable
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
     scripts:
       - name: Get Flutter packages
         script: |
           flutter pub get
-      - name: Flutter analyze
+      - name: Build Android release
         script: |
-          flutter analyze
-      - name: Flutter unit tests
-        script: |
-          flutter test
-        ignore_failure: true
-      - name: Build Android AAB
-        script: |
-          flutter build appbundle --release
-      - name: Build iOS IPA
-        script: |
-          flutter build ipa --release \\
-            --export-options-plist=/Users/builder/export_options.plist
+          flutter build appbundle --release \\
+            --build-number=$BUILD_NUMBER \\
+            --build-name=$VERSION_NAME
     artifacts:
       - build/**/outputs/**/*.aab
-      - build/ios/ipa/*.ipa
-      - /tmp/xcodebuild_logs/*.log`,
 
-  "react-native": `workflows:
-  react-native-android:
-    name: React Native Android
+  flutter-ios:
+    name: Flutter iOS
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      flutter: stable
+      vars:
+        BUILD_NUMBER: $BUILD_NUMBER    # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME    # Injected via trigger_build variables
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Build IPA
+        script: |
+          flutter build ipa --release \\
+            --build-number=$BUILD_NUMBER \\
+            --build-name=$VERSION_NAME \\
+            --export-options-plist=/Users/builder/export_options.plist
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM`,
+
+  // ─── Flutter Native Module ────────────────────────────────────────────────────
+
+  "flutter-native": `# Native app with embedded Flutter module.
+# Use this when you have a native Android or iOS host app that integrates
+# a Flutter module as a library (add-to-app pattern).
+#
+# Adjust FLUTTER_MODULE_DIR and HOST_APP_DIR to match your repo layout.
+workflows:
+  flutter-native-android:
+    name: Native Android with Flutter Module
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
       android_signing:
         - keystore_reference
+      flutter: stable
       vars:
-        PACKAGE_NAME: "io.codemagic.sample.reactnative"
+        FLUTTER_MODULE_DIR: my_flutter_module    # Replace with your Flutter module directory
+        HOST_APP_DIR: my_host_app                # Replace with your native Android app directory
+        PACKAGE_NAME: com.example.myapp          # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER              # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME              # Injected via trigger_build variables
+    scripts:
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/$HOST_APP_DIR/local.properties"
+      - name: Get Flutter packages
+        script: |
+          cd $CM_BUILD_DIR/$FLUTTER_MODULE_DIR && flutter pub get
+      - name: Build Flutter AAR
+        script: |
+          cd $CM_BUILD_DIR/$FLUTTER_MODULE_DIR && flutter build aar
+      - name: Build host app
+        script: |
+          cd $CM_BUILD_DIR/$HOST_APP_DIR
+          ./gradlew bundleRelease \\
+            -PversionCode=$BUILD_NUMBER \\
+            -PversionName=$VERSION_NAME
+    artifacts:
+      - "**/*.aab"
+
+  flutter-native-ios:
+    name: Native iOS with Flutter Module
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      flutter: stable
+      vars:
+        FLUTTER_MODULE_DIR: my_flutter_module    # Replace with your Flutter module directory
+        HOST_APP_DIR: my_host_app                # Replace with your native iOS app directory
+        XCODE_PROJECT: MyApp.xcodeproj           # Replace with your Xcode project filename
+        XCODE_SCHEME: MyApp                      # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER              # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME              # Injected via trigger_build variables
+    scripts:
+      - name: Get Flutter packages and build iOS framework
+        script: |
+          cd $CM_BUILD_DIR/$FLUTTER_MODULE_DIR
+          flutter pub get
+          flutter build ios-framework \\
+            --output=$CM_BUILD_DIR/$HOST_APP_DIR/Flutter
+      - name: Install CocoaPods dependencies
+        script: |
+          cd $CM_BUILD_DIR/$HOST_APP_DIR && pod install
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd $CM_BUILD_DIR/$HOST_APP_DIR
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \\
+            --project "$CM_BUILD_DIR/$HOST_APP_DIR/$XCODE_PROJECT" \\
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM`,
+
+  // ─── React Native ─────────────────────────────────────────────────────────────
+
+  "react-native": `# React Native — separate workflows for Android AAB and iOS IPA.
+# This template assumes Expo. If you are not using Expo, remove the
+# 'Run Expo Prebuild' steps from both workflows.
+workflows:
+  react-native-android:
+    name: React Native Android
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      android_signing:
+        - keystore_reference
+      node: latest
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
     scripts:
       - name: Set Android SDK location
         script: |
@@ -60,7 +272,9 @@ export const TEMPLATES: Record<string, string> = {
       - name: Build Android release
         script: |
           cd android
-          ./gradlew bundleRelease
+          ./gradlew bundleRelease \\
+            -PversionCode=$BUILD_NUMBER \\
+            -PversionName=$VERSION_NAME
     artifacts:
       - android/app/build/outputs/**/*.aab
 
@@ -68,16 +282,16 @@ export const TEMPLATES: Record<string, string> = {
     name: React Native iOS
     max_build_duration: 120
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: codemagic
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: io.codemagic.sample.reactnative
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      node: latest
       vars:
-        XCODE_WORKSPACE: "CodemagicSample.xcworkspace"
-        XCODE_SCHEME: "CodemagicSample"
-        APP_STORE_APPLE_ID: 1555555551
+        XCODE_WORKSPACE: MyApp.xcworkspace    # Replace with your .xcworkspace filename
+        XCODE_SCHEME: MyApp                   # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER           # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME           # Injected via trigger_build variables
     scripts:
       - name: Install npm dependencies
         script: |
@@ -90,12 +304,92 @@ export const TEMPLATES: Record<string, string> = {
           cd ios && pod install
       - name: Set up provisioning profiles
         script: xcode-project use-profiles
-      - name: Increment build number
+      - name: Set build number
         script: |
           cd $CM_BUILD_DIR/ios
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
-      - name: Build ipa for distribution
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \\
+            --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \\
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM`,
+
+  // ─── Ionic Capacitor ─────────────────────────────────────────────────────────
+
+  "ionic-capacitor": `# Ionic Capacitor — separate workflows for Android AAB and iOS IPA.
+workflows:
+  ionic-capacitor-android:
+    name: Ionic Capacitor Android
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      android_signing:
+        - keystore_reference
+      node: latest
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
+    scripts:
+      - name: Set Android SDK location
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Build web assets
+        script: |
+          npm run build
+      - name: Sync Capacitor
+        script: |
+          npx cap sync
+      - name: Build Android release
+        script: |
+          cd android
+          ./gradlew bundleRelease \\
+            -PversionCode=$BUILD_NUMBER \\
+            -PversionName=$VERSION_NAME
+    artifacts:
+      - android/app/build/outputs/**/*.aab
+
+  ionic-capacitor-ios:
+    name: Ionic Capacitor iOS
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      node: latest
+      vars:
+        XCODE_WORKSPACE: MyApp.xcworkspace    # Replace with your .xcworkspace filename
+        XCODE_SCHEME: MyApp                   # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER           # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME           # Injected via trigger_build variables
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Build web assets
+        script: |
+          npm run build
+      - name: Sync Capacitor
+        script: |
+          npx cap sync
+      - name: Install CocoaPods dependencies
+        script: |
+          cd ios && pod install
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd $CM_BUILD_DIR/ios
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
         script: |
           xcode-project build-ipa \\
             --workspace "$CM_BUILD_DIR/ios/$XCODE_WORKSPACE" \\
@@ -104,85 +398,212 @@ export const TEMPLATES: Record<string, string> = {
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log`,
 
-  ios: `workflows:
-  ios-native-workflow:
-    name: iOS Native
+  // ─── Ionic Cordova ────────────────────────────────────────────────────────────
+
+  "ionic-cordova": `# Ionic Cordova — separate workflows for Android APK and iOS IPA.
+# Cordova builds APKs rather than AABs. Google Play accepts both, but AABs
+# are preferred for new apps. Check the Codemagic Cordova docs if you need AAB.
+workflows:
+  ionic-cordova-android:
+    name: Ionic Cordova Android
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      android_signing:
+        - keystore_reference
+      node: latest
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Install Cordova
+        script: |
+          npm install -g cordova
+      - name: Add Android platform
+        script: |
+          ionic cordova platform remove android --nosave
+          ionic cordova platform add android \\
+            --confirm \\
+            --no-interactive \\
+            --noresources
+      - name: Build Android release
+        script: |
+          ionic cordova build android \\
+            --release \\
+            --no-interactive \\
+            --prod \\
+            --device
+    artifacts:
+      - platforms/android/app/build/outputs/**/*.apk
+
+  ionic-cordova-ios:
+    name: Ionic Cordova iOS
     max_build_duration: 120
     instance_type: mac_mini_m2
-    integrations:
-      app_store_connect: codemagic
     environment:
       ios_signing:
         distribution_type: app_store
-        bundle_identifier: io.codemagic.sample.iosnative
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      node: latest
       vars:
-        XCODE_WORKSPACE: "CodemagicSample.xcworkspace"
-        XCODE_SCHEME: "CodemagicSample"
-        APP_STORE_APPLE_ID: 1555555551
-      xcode: latest
-      cocoapods: default
+        XCODE_WORKSPACE: MyApp.xcworkspace    # Replace with your .xcworkspace filename
+        XCODE_SCHEME: MyApp                   # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER           # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME           # Injected via trigger_build variables
     scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install
+      - name: Install Cordova
+        script: |
+          npm install -g cordova
+      - name: Add iOS platform
+        script: |
+          ionic cordova platform add ios \\
+            --confirm \\
+            --no-interactive
       - name: Install CocoaPods dependencies
         script: |
-          pod install
+          cd platforms/ios && pod install
       - name: Set up provisioning profiles
         script: xcode-project use-profiles
-      - name: Increment build number
+      - name: Set build number
         script: |
-          cd $CM_BUILD_DIR
-          LATEST_BUILD_NUMBER=$(app-store-connect get-latest-app-store-build-number "$APP_STORE_APPLE_ID")
-          agvtool new-version -all $(($LATEST_BUILD_NUMBER + 1))
-      - name: Build ipa for distribution
+          cd $CM_BUILD_DIR/platforms/ios
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
         script: |
           xcode-project build-ipa \\
-            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \\
+            --workspace "$CM_BUILD_DIR/platforms/ios/$XCODE_WORKSPACE" \\
             --scheme "$XCODE_SCHEME"
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log`,
 
-  android: `workflows:
-  native-android:
-    name: Native Android
+  // ─── Kotlin Multiplatform Mobile ─────────────────────────────────────────────
+
+  kmm: `# Kotlin Multiplatform Mobile (KMM) — Android AAB and iOS IPA.
+# Default project structure assumes androidApp/ and iosApp/ subdirectories.
+# Adjust XCODE_WORKSPACE and gradlew task if your layout differs.
+workflows:
+  kmm-android:
+    name: KMM Android
     max_build_duration: 120
-    instance_type: mac_mini_m2
+    instance_type: linux_x2
     environment:
       android_signing:
         - keystore_reference
       vars:
-        PACKAGE_NAME: "io.codemagic.sample.androidnative"
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
     scripts:
       - name: Set Android SDK location
         script: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
       - name: Build Android release
         script: |
-          ./gradlew bundleRelease
+          ./gradlew androidApp:bundleRelease \\
+            -PversionCode=$BUILD_NUMBER \\
+            -PversionName=$VERSION_NAME
     artifacts:
-      - app/build/outputs/**/*.aab`,
+      - androidApp/build/outputs/**/*.aab
 
-  unity: `workflows:
-  unity-android-workflow:
-    name: Unity Android Workflow
+  kmm-ios:
+    name: KMM iOS
     max_build_duration: 120
+    instance_type: mac_mini_m2
     environment:
-      unity: 2022.2.16f1
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp           # Replace with your bundle ID
+      vars:
+        XCODE_WORKSPACE: iosApp/MyApp.xcworkspace       # Replace with your .xcworkspace path
+        XCODE_SCHEME: iosApp                            # Replace with your Xcode scheme name
+        BUILD_NUMBER: $BUILD_NUMBER                     # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME                     # Injected via trigger_build variables
+    scripts:
+      - name: Install CocoaPods dependencies
+        script: |
+          cd iosApp && pod install
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd $CM_BUILD_DIR/iosApp
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \\
+            --workspace "$CM_BUILD_DIR/$XCODE_WORKSPACE" \\
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+      - $HOME/Library/Developer/Xcode/DerivedData/**/Build/**/*.dSYM`,
+
+  // ─── Linux Snap ──────────────────────────────────────────────────────────────
+
+  snap: `# Linux Snap Package — build a snap using Snapcraft.
+# The snapcraft.yaml in your repository defines the snap configuration.
+# Set SNAPCRAFT_CREDENTIALS in a Codemagic variable group for publishing to the Snap Store.
+workflows:
+  snap-build:
+    name: Snap Package
+    max_build_duration: 120
+    instance_type: linux_x2
+    environment:
+      vars:
+        SNAP_NAME: my-app    # Replace with your snap name (used for the output filename)
+        SNAPCRAFT_BUILD_ENVIRONMENT: host
+    scripts:
+      - name: Build snap
+        script: |
+          snapcraft snap --output $SNAP_NAME.snap
+    artifacts:
+      - "**/*.snap"`,
+
+  // ─── Unity (Android + iOS) ───────────────────────────────────────────────────
+
+  unity: `# Unity — build Android AAB and iOS IPA from a Unity project.
+#
+# Requirements:
+#   - A variable group named 'unity_credentials' containing:
+#       UNITY_SERIAL, UNITY_EMAIL, UNITY_PASSWORD
+#   - A BuildScript.cs in your Unity project with static BuildAndroid() and BuildIos() methods
+#   - Code signing set up for both platforms in Codemagic
+#
+# The publishing.scripts block runs post-build to deactivate the Unity license.
+# This is required cleanup — it is not related to app store publishing.
+workflows:
+  unity-android:
+    name: Unity Android
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
       android_signing:
         - keystore_reference
       groups:
         - unity_credentials
       vars:
-        PACKAGE_NAME: "io.codemagic.unitysample"
+        UNITY_BIN: $UNITY_HOME/Contents/MacOS/Unity
+        PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        BUILD_NUMBER: $BUILD_NUMBER        # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME        # Injected via trigger_build variables
     scripts:
-      - name: Activate Unity License
+      - name: Activate Unity license
         script: |
-          $UNITY_HOME/Contents/MacOS/Unity -batchmode -quit -logFile - \\
+          $UNITY_BIN -batchmode -quit -logFile \\
             -serial \${UNITY_SERIAL} \\
             -username \${UNITY_EMAIL} \\
             -password \${UNITY_PASSWORD}
-      - name: Build the project
+      - name: Build Android
         script: |
-          $UNITY_HOME/Contents/MacOS/Unity -batchmode \\
+          $UNITY_BIN -batchmode \\
             -quit \\
             -logFile \\
             -projectPath . \\
@@ -190,94 +611,237 @@ export const TEMPLATES: Record<string, string> = {
             -nographics
     artifacts:
       - android/*.aab
+      - android/*.apk
     publishing:
       scripts:
-        - name: Deactivate Unity License
+        - name: Deactivate Unity license
           script: |
-            $UNITY_HOME/Contents/MacOS/Unity -batchmode -quit -logFile - \\
+            $UNITY_BIN -batchmode -quit -logFile \\
+              -returnlicense \\
+              -username \${UNITY_EMAIL} \\
+              -password \${UNITY_PASSWORD}
+
+  unity-ios:
+    name: Unity iOS
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp        # Replace with your bundle ID
+      groups:
+        - unity_credentials
+      vars:
+        UNITY_BIN: $UNITY_HOME/Contents/MacOS/Unity
+        XCODE_PROJECT: ios/Unity-iPhone.xcodeproj   # Default Unity Xcode project path
+        XCODE_SCHEME: Unity-iPhone                  # Default Unity Xcode scheme
+        BUILD_NUMBER: $BUILD_NUMBER                 # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME                 # Injected via trigger_build variables
+    scripts:
+      - name: Activate Unity license
+        script: |
+          $UNITY_BIN -batchmode -quit -logFile \\
+            -serial \${UNITY_SERIAL} \\
+            -username \${UNITY_EMAIL} \\
+            -password \${UNITY_PASSWORD}
+      - name: Build iOS (generates Xcode project)
+        script: |
+          $UNITY_BIN -batchmode \\
+            -quit \\
+            -logFile \\
+            -projectPath . \\
+            -executeMethod BuildScript.BuildIos \\
+            -nographics
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Set build number
+        script: |
+          cd $CM_BUILD_DIR/ios
+          agvtool new-version -all $BUILD_NUMBER
+      - name: Build IPA
+        script: |
+          xcode-project build-ipa \\
+            --project "$CM_BUILD_DIR/$XCODE_PROJECT" \\
+            --scheme "$XCODE_SCHEME"
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      scripts:
+        - name: Deactivate Unity license
+          script: |
+            $UNITY_BIN -batchmode -quit -logFile \\
               -returnlicense \\
               -username \${UNITY_EMAIL} \\
               -password \${UNITY_PASSWORD}`,
 
-  "ionic-capacitor": `workflows:
-  ionic-capacitor-android:
-    name: Ionic Capacitor Android
-    max_build_duration: 120
-    instance_type: mac_mini_m2
-    environment:
-      android_signing:
-        - keystore_reference
-      vars:
-        PACKAGE_NAME: "io.codemagic.ionicsample"
-      node: latest
-    scripts:
-      - name: Set up local.properties
-        script: |
-          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
-      - name: Install npm dependencies
-        script: |
-          npm install
-      - name: Compile web code
-        script: npm run build
-      - name: Sync Capacitor
-        script: |
-          npx cap sync
-      - name: Build Android release
-        script: |
-          cd android
-          ./gradlew bundleRelease
-    artifacts:
-      - android/app/build/outputs/**/*.aab`,
+  // ─── Unity Oculus VR ─────────────────────────────────────────────────────────
 
-  "ionic-cordova": `workflows:
-  ionic-cordova-android:
-    name: Ionic Cordova Android
+  "unity-oculus": `# Unity Oculus VR — build and publish an APK for Oculus Quest.
+#
+# Requirements:
+#   - A variable group named 'unity_credentials':
+#       UNITY_SERIAL, UNITY_EMAIL, UNITY_PASSWORD
+#   - A variable group named 'oculus_credentials':
+#       OCULUS_APP_ID, OCULUS_APP_SECRET
+#   - A BuildScript.cs with a static BuildAndroid() method
+#   - An Android keystore set up in Codemagic → Code signing
+#
+# The publishing.scripts block deactivates the Unity license and uploads to Oculus.
+# The Oculus Platform Utility (ovr-platform-util) is downloaded at publish time.
+workflows:
+  unity-oculus-workflow:
+    name: Unity Oculus VR
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      android_signing:
+        - keystore_reference
+      groups:
+        - unity_credentials
+        - oculus_credentials
+      vars:
+        UNITY_BIN: $UNITY_HOME/Contents/MacOS/Unity
+        OCULUS_RELEASE_CHANNEL: ALPHA    # Replace with target channel: ALPHA, BETA, RC, or STORE
+        BUILD_NUMBER: $BUILD_NUMBER      # Injected via trigger_build variables
+    scripts:
+      - name: Activate Unity license
+        script: |
+          $UNITY_BIN -batchmode -quit -logFile \\
+            -serial \${UNITY_SERIAL} \\
+            -username \${UNITY_EMAIL} \\
+            -password \${UNITY_PASSWORD}
+      - name: Build Android APK
+        script: |
+          $UNITY_BIN -batchmode \\
+            -quit \\
+            -logFile \\
+            -projectPath . \\
+            -executeMethod BuildScript.BuildAndroid \\
+            -nographics \\
+            -buildTarget Android
+    artifacts:
+      - android/*.apk
+    publishing:
+      scripts:
+        - name: Deactivate Unity license
+          script: |
+            $UNITY_BIN -batchmode -quit -logFile \\
+              -returnlicense \\
+              -username \${UNITY_EMAIL} \\
+              -password \${UNITY_PASSWORD}
+        - name: Install Oculus Platform Utility
+          script: |
+            wget -O ovr-platform-util \\
+              "https://www.oculus.com/download_app/?id=1462426033810370&access_token=OC|1462426033810370|"
+            chmod +x ./ovr-platform-util
+        - name: Upload to Oculus
+          script: |
+            ./ovr-platform-util upload-quest-build \\
+              --app_id \${OCULUS_APP_ID} \\
+              --app_secret \${OCULUS_APP_SECRET} \\
+              --apk android/android.apk \\
+              --channel $OCULUS_RELEASE_CHANNEL`,
+
+  // ─── .NET MAUI ───────────────────────────────────────────────────────────────
+
+  "dotnet-maui": `# .NET MAUI — build iOS IPA and Android AAB.
+# .NET SDK and MAUI workloads are installed from the Microsoft installer at build time.
+# Replace PROJECT_PATH with the path to your .csproj file.
+workflows:
+  maui-ios:
+    name: MAUI iOS
+    max_build_duration: 120
+    instance_type: mac_mini_m2
+    environment:
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.example.myapp    # Replace with your bundle ID
+      vars:
+        DOTNET_PATH: $CM_BUILD_DIR/dotnet
+        DOTNET: $CM_BUILD_DIR/dotnet/dotnet
+        PROJECT_PATH: src/MyApp/MyApp.csproj    # Replace with your .csproj path
+        BUILD_NUMBER: $BUILD_NUMBER             # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME             # Injected via trigger_build variables
+    scripts:
+      - name: Install .NET SDK
+        script: |
+          wget https://dot.net/v1/dotnet-install.sh
+          chmod +x dotnet-install.sh
+          ./dotnet-install.sh --install-dir $DOTNET_PATH
+      - name: Install MAUI workloads
+        script: |
+          $DOTNET nuget locals all --clear
+          $DOTNET workload install ios maui \\
+            --source https://aka.ms/dotnet/nuget/index.json \\
+            --source https://api.nuget.org/v3/index.json
+      - name: Set up provisioning profiles
+        script: xcode-project use-profiles
+      - name: Build iOS IPA
+        script: |
+          CERT_NAME=$(keychain list-certificates | jq -r '.[0].common_name')
+          PROFILE_NAME=$(find ~/Library/MobileDevice/Provisioning\\ Profiles -name "*.mobileprovision" | head -1 | xargs -I{} /usr/libexec/PlistBuddy -c "print :Name" /dev/stdin <<< $(security cms -D -i {}))
+          $DOTNET publish $PROJECT_PATH \\
+            -f net8.0-ios \\
+            -c Release \\
+            -p:BuildIpa=True \\
+            -p:ApplicationDisplayVersion="$VERSION_NAME" \\
+            -p:ApplicationVersion=$BUILD_NUMBER \\
+            -p:RuntimeIdentifier=ios-arm64 \\
+            -p:CodesignKey="$CERT_NAME" \\
+            -p:CodesignProvision="$PROFILE_NAME" \\
+            -o artifacts
+    artifacts:
+      - artifacts/*.ipa
+
+  maui-android:
+    name: MAUI Android
     max_build_duration: 120
     instance_type: mac_mini_m2
     environment:
       android_signing:
         - keystore_reference
       vars:
-        PACKAGE_NAME: "io.codemagic.ionicsample"
-      node: latest
+        DOTNET_PATH: $CM_BUILD_DIR/dotnet
+        DOTNET: $CM_BUILD_DIR/dotnet/dotnet
+        PACKAGE_NAME: com.example.myapp         # Replace with your application ID
+        PROJECT_PATH: src/MyApp/MyApp.csproj    # Replace with your .csproj path
+        BUILD_NUMBER: $BUILD_NUMBER             # Injected via trigger_build variables
+        VERSION_NAME: $VERSION_NAME             # Injected via trigger_build variables
     scripts:
-      - name: Install npm dependencies
+      - name: Install .NET SDK
         script: |
-          npm install
-          npm ci
-          cvm install 9.0.0
-          cvm use 9.0.0
-      - name: Setup Cordova Android platform
+          wget https://dot.net/v1/dotnet-install.sh
+          chmod +x dotnet-install.sh
+          ./dotnet-install.sh --install-dir $DOTNET_PATH
+      - name: Install MAUI workloads
         script: |
-          ionic cordova platform remove android --nosave
-          ionic cordova platform add android \\
-            --confirm \\
-            --no-interactive \\
-            --noresources
-      - name: Build Android Cordova App
+          $DOTNET nuget locals all --clear
+          $DOTNET workload install android maui \\
+            --source https://aka.ms/dotnet/nuget/index.json \\
+            --source https://api.nuget.org/v3/index.json
+      - name: Build Android AAB
         script: |
-          ionic cordova build android \\
-            --release \\
-            --no-interactive \\
-            --prod \\
-            --device
-      - name: Sign APK
-        script: |
-          APK_PATH=$(find platforms/android/app/build/outputs/apk/release -name "*.apk" | head -1)
-          jarsigner \\
-            -sigalg SHA1withRSA \\
-            -digestalg SHA1 \\
-            -keystore $CM_KEYSTORE_PATH \\
-            -storepass $CM_KEYSTORE_PASSWORD \\
-            -keypass $CM_KEY_PASSWORD \\
-            $APK_PATH $CM_KEY_ALIAS
+          $DOTNET publish $PROJECT_PATH \\
+            -f net8.0-android \\
+            -c Release \\
+            -p:AndroidKeyStore=True \\
+            -p:AndroidSigningKeyStore=$CM_KEYSTORE_PATH \\
+            -p:AndroidSigningKeyAlias=$CM_KEY_ALIAS \\
+            -p:AndroidSigningKeyPass=$CM_KEY_PASSWORD \\
+            -p:AndroidSigningStorePass=$CM_KEYSTORE_PASSWORD \\
+            -p:ApplicationVersion=$BUILD_NUMBER \\
+            -p:ApplicationDisplayVersion="$VERSION_NAME" \\
+            -o artifacts
     artifacts:
-      - platforms/android/app/build/outputs/**/*.apk`,
+      - artifacts/*Signed.aab`,
 };
 
 /**
  * Get a starter codemagic.yaml template for a given project type.
  * Templates cover build and signing only — publishing is handled via ASC/Google Play tools.
+ * BUILD_NUMBER and VERSION_NAME must be injected via trigger_build variables;
+ * determine them first using list_asc_builds or list_google_play_tracks.
  * @param projectType - One of the supported project types (see listYamlTemplateTypes).
  * @returns The yaml template string, or null if the project type is not recognised.
  */
@@ -287,7 +851,7 @@ export function getYamlTemplate(projectType: string): string | null {
 
 /**
  * List all supported project type keys for yaml templates.
- * @returns Array of project type strings, e.g. ["flutter", "react-native", ...].
+ * @returns Array of project type strings, e.g. ["android", "ios", "flutter", ...].
  */
 export function listYamlTemplateTypes(): string[] {
   return Object.keys(TEMPLATES);

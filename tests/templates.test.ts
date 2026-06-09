@@ -8,11 +8,22 @@ describe("listYamlTemplateTypes", () => {
     expect(types.length).toBeGreaterThan(0);
   });
 
-  it("includes core project types", () => {
+  it("includes all expected project types", () => {
     const types = listYamlTemplateTypes();
-    expect(types).toContain("flutter");
-    expect(types).toContain("ios");
+    // original types
     expect(types).toContain("android");
+    expect(types).toContain("ios");
+    expect(types).toContain("flutter");
+    expect(types).toContain("react-native");
+    expect(types).toContain("ionic-capacitor");
+    expect(types).toContain("ionic-cordova");
+    expect(types).toContain("unity");
+    // new types
+    expect(types).toContain("flutter-native");
+    expect(types).toContain("kmm");
+    expect(types).toContain("snap");
+    expect(types).toContain("unity-oculus");
+    expect(types).toContain("dotnet-maui");
   });
 });
 
