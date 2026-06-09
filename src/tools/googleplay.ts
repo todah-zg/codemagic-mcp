@@ -5,7 +5,7 @@ import { listTracks, listBundles, uploadToGooglePlay } from "../googleplay.js";
 export function registerGooglePlayTools(server: McpServer): void {
 
   server.registerTool("list_google_play_tracks", {
-    description: "List available Google Play tracks for an app (internal, alpha, beta, production)",
+    description: "List Google Play tracks (internal, alpha, beta, production) with current release info and version codes. Find the highest versionCode across all tracks, increment by 1, and pass that as BUILD_NUMBER in trigger_build variables before triggering a release build.",
     inputSchema: {
       package_name: z.string().describe("The Android package name, e.g. com.example.myapp"),
     },
@@ -24,7 +24,7 @@ export function registerGooglePlayTools(server: McpServer): void {
   });
 
   server.registerTool("list_google_play_bundles", {
-    description: "List uploaded App Bundles (AAB) for an app on Google Play",
+    description: "List all uploaded App Bundles (AAB) for an app on Google Play, with their version codes. Use this to audit what has already been uploaded before triggering a new build.",
     inputSchema: {
       package_name: z.string().describe("The Android package name, e.g. com.example.myapp"),
     },
@@ -37,7 +37,7 @@ export function registerGooglePlayTools(server: McpServer): void {
   });
 
   server.registerTool("upload_to_google_play", {
-    description: "Download an AAB artifact from Codemagic and publish it to Google Play. The package name is extracted from the AAB automatically.",
+    description: "Download an AAB artifact from Codemagic and publish it to a Google Play track. Use the AAB artifact URL returned by wait_for_build. Start with the internal track — it is safest for first uploads and can be promoted to alpha/beta/production manually in the Play Console.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,

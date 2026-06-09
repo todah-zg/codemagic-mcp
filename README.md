@@ -150,6 +150,16 @@ The config file is at:
 | `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, dotnet-maui — plus android-debug, flutter-android-debug, react-native-android-debug for initial onboarding |
 | `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
 
+### Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `onboarding` | Zero to first debug build — add repo, get template, trigger build, configure webhook |
+| `android_release` | Signed AAB from build to Google Play — build number, template, trigger, publish |
+| `ios_release` | Signed IPA from build to TestFlight — build number, template, trigger, upload |
+
+Prompts are reusable workflow playbooks. In Claude Desktop they appear as slash commands. An agent can also invoke them by name to get step-by-step instructions for a complete workflow.
+
 ## Project structure
 
 ```
@@ -160,6 +170,7 @@ src/
   googleplay.ts         — Google Play CLI wrapper
   yaml.ts               — YAML validation logic
   templates.ts          — Static codemagic.yaml templates
+  prompts.ts            — MCP prompt resources (workflow playbooks)
   tools/
     codemagic.ts        — Codemagic MCP tool registrations
     asc.ts              — App Store Connect MCP tool registrations

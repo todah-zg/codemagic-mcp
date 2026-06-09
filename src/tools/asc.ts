@@ -5,7 +5,7 @@ import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getR
 export function registerAscTools(server: McpServer): void {
 
   server.registerTool("list_asc_apps", {
-    description: "List applications in App Store Connect",
+    description: "List apps in App Store Connect. Call this first to get the ASC app ID needed by all other App Store Connect tools.",
   }, async () => {
     const apps = await listAscApps();
     const text = apps.map(app => `${app.name} (${app.bundleId}) — ID: ${app.id}`).join("\n");
@@ -15,7 +15,7 @@ export function registerAscTools(server: McpServer): void {
   });
 
   server.registerTool("list_asc_builds", {
-    description: "List TestFlight builds for an app in App Store Connect",
+    description: "List TestFlight builds for an app in App Store Connect. Find the highest version number, increment by 1, and pass that as BUILD_NUMBER in trigger_build variables before triggering a release build.",
     inputSchema: {
       app_id: z.string().describe("The App Store Connect app ID"),
     },
@@ -30,7 +30,7 @@ export function registerAscTools(server: McpServer): void {
   });
 
   server.registerTool("list_testflight_groups", {
-    description: "List TestFlight beta groups for an app",
+    description: "List TestFlight beta groups for an app. Use a group name from this list in the beta_group parameter of upload_to_testflight to distribute to testers automatically after upload.",
     inputSchema: {
       app_id: z.string().describe("The App Store Connect app ID"),
     },
@@ -45,7 +45,7 @@ export function registerAscTools(server: McpServer): void {
   });
 
   server.registerTool("get_asc_review_status", {
-    description: "Get the App Store review status for an app",
+    description: "Get the current App Store review status for an app. Call this after submitting to the App Store to monitor progress and check for blockers.",
     inputSchema: {
       app_id: z.string().describe("The App Store Connect app ID"),
     },

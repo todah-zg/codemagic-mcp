@@ -13,7 +13,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("list_applications", {
-    description: "List all applications in your Codemagic account",
+    description: "List all applications in your Codemagic account. Call this first to get the app IDs needed by all other Codemagic tools.",
     inputSchema: {
       team_id: z.string().optional().describe("Team ID to list apps for. If omitted, lists apps for the authenticated user."),
     },
@@ -26,7 +26,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("list_workflows", {
-    description: "List workflows for an application. Note: yaml-defined workflows only appear after their first build has run.",
+    description: "List workflows for an application. Returns workflow names and IDs — use the ID in trigger_build to run a specific workflow. Note: yaml-defined workflows only appear after their first build has run.",
     inputSchema: {
       app_id: z.string().describe("The application ID"),
     },
@@ -39,7 +39,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("list_builds", {
-    description: "List builds for a team, with optional filters",
+    description: "List builds for a team with optional filters. Returns build IDs and status. Use get_build with a build ID to retrieve full details and artifact download URLs.",
     inputSchema: {
       team_id: z.string().describe("The team ID to list builds for"),
       app_id: z.string().optional().describe("Filter by Application ID"),
@@ -56,7 +56,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("get_build", {
-    description: "Get full details for a single build, including artifacts",
+    description: "Get full details for a single build including artifact download URLs. The build ID comes from trigger_build or list_builds. Artifact URLs are short-lived — use them promptly, or use wait_for_build which returns them automatically on completion.",
     inputSchema: {
       build_id: z.string().describe("The build ID"),
     },
@@ -79,7 +79,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("trigger_build", {
-    description: "Trigger a new build on Codemagic. Requires an existing workflow defined in the repository's codemagic.yaml or in the Codemagic UI.",
+    description: "Trigger a new build on Codemagic. For release builds: determine BUILD_NUMBER first using list_asc_builds (iOS) or list_google_play_tracks (Android), then pass it in the variables parameter. Use yaml_content to supply an inline codemagic.yaml — get a starter template from get_yaml_template and validate it with validate_codemagic_yaml before triggering. Call wait_for_build with the returned build ID to wait for completion and retrieve artifact URLs.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
