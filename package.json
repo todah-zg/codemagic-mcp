@@ -1,11 +1,33 @@
 {
   "name": "codemagic-mcp",
   "version": "0.1.0",
+  "description": "MCP server for Codemagic CI/CD and App Store Connect / Google Play — build, sign, and publish mobile apps through AI agents",
+  "keywords": [
+    "mcp",
+    "codemagic",
+    "ci-cd",
+    "mobile",
+    "ios",
+    "android",
+    "app-store",
+    "google-play",
+    "flutter"
+  ],
+  "license": "MIT",
+  "author": "Codemagic",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/todah-zg/codemagic-mcp.git"
+  },
   "type": "module",
   "scripts": {
     "build": "tsc",
+    "prepare": "npm run build",
     "start": "node dist/index.js"
   },
+  "files": [
+    "dist/"
+  ],
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "ajv": "^6.15.0",
