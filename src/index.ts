@@ -13,6 +13,21 @@ if (!apiToken) {
     process.exit(1);
 }
 
+// ASC credentials — optional, but warn if partial
+const ascVars = ["ASC_KEY_ID", "ASC_ISSUER_ID", "ASC_PRIVATE_KEY_B64"];
+const missingAsc = ascVars.filter(v => !process.env[v]);
+if (missingAsc.length > 0 && missingAsc.length < ascVars.length) {
+    console.error(`Warning: partial ASC configuration — missing: ${missingAsc.join(", ")}. App Store Connect tools will fail.`);
+} else if (missingAsc.length === ascVars.length) {
+    console.error("Warning: ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY_B64 are not set. App Store Connect tools will not work.");
+}
+
+// Google Play credentials — optional, warn if missing
+if (!process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS) {
+    console.error("Warning: GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS is not set. Google Play tools will not work.");
+}
+
+
 
 const server = new McpServer({
     name: "codemagic-mcp",
