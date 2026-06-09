@@ -835,6 +835,78 @@ workflows:
             -o artifacts
     artifacts:
       - artifacts/*Signed.aab`,
+
+      // ─── Onboarding / Debug builds ───────────────────────────────────────────────
+
+      "android-debug": `# Android debug build — for onboarding and initial setup only.
+    # No signing or instance_type override required — runs on the free tier.
+    # Once this build succeeds, switch to the 'android' template for release builds.
+    workflows:
+      android-debug:
+        name: Android Debug
+        max_build_duration: 60
+        environment:
+          vars:
+            PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        scripts:
+          - name: Set Android SDK location
+            script: |
+              echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+          - name: Build Android debug
+            script: |
+              ./gradlew assembleDebug
+        artifacts:
+          - app/build/outputs/**/*.apk`,
+    
+      "flutter-android-debug": `# Flutter Android debug build — for onboarding and initial setup only.
+    # No signing or instance_type override required — runs on the free tier.
+    # Once this build succeeds, switch to the 'flutter' template for release builds.
+    workflows:
+      flutter-android-debug:
+        name: Flutter Android Debug
+        max_build_duration: 60
+        environment:
+          flutter: stable
+          vars:
+            PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        scripts:
+          - name: Get Flutter packages
+            script: |
+              flutter pub get
+          - name: Build Android debug
+            script: |
+              flutter build apk --debug
+        artifacts:
+          - build/**/outputs/**/*.apk`,
+    
+      "react-native-android-debug": `# React Native Android debug build — for onboarding and initial setup only.
+    # No signing or instance_type override required — runs on the free tier.
+    # Assumes Expo — remove the 'Run Expo Prebuild' step if not using Expo.
+    # Once this build succeeds, switch to the 'react-native' template for release builds.
+    workflows:
+      react-native-android-debug:
+        name: React Native Android Debug
+        max_build_duration: 60
+        environment:
+          node: latest
+          vars:
+            PACKAGE_NAME: com.example.myapp    # Replace with your application ID
+        scripts:
+          - name: Set Android SDK location
+            script: |
+              echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/android/local.properties"
+          - name: Install npm dependencies
+            script: |
+              npm install
+          - name: Run Expo Prebuild
+            script: |
+              npx expo prebuild
+          - name: Build Android debug
+            script: |
+              cd android
+              ./gradlew assembleDebug
+        artifacts:
+          - android/app/build/outputs/**/*.apk`,
 };
 
 /**

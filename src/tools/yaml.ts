@@ -40,6 +40,9 @@ export function registerYamlTools(server: McpServer): void {
         "unity",
         "unity-oculus",
         "dotnet-maui",
+        "android-debug",
+        "flutter-android-debug",
+        "react-native-android-debug",
       ]).describe("The project type to get a template for"),
     },
   }, async ({ project_type }) => {

@@ -111,6 +111,9 @@ The config file is at:
 | `trigger_build` | Trigger a build; optionally supply an inline `codemagic.yaml` |
 | `wait_for_build` | Poll until a build reaches a terminal state; returns artifacts |
 | `add_application` | Connect a Git repository to Codemagic |
+| `get_webhook_url` | Get the incoming webhook URL to paste into your Git provider settings |
+| `list_webhooks` | List webhook subscriptions configured for an app |
+| `delete_webhook` | Delete a webhook subscription from an app |
 
 ### App Store Connect (iOS)
 
@@ -144,7 +147,7 @@ The config file is at:
 | Tool | Description |
 |------|-------------|
 | `validate_codemagic_yaml` | Validate a `codemagic.yaml` against the official Codemagic JSON schema |
-| `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, or dotnet-maui |
+| `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, dotnet-maui — plus android-debug, flutter-android-debug, react-native-android-debug for initial onboarding |
 | `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
 
 ## Project structure

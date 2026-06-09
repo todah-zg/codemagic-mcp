@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable } from "../codemagic.js";
-
+import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
 
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -220,6 +219,53 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     return {
       content: [{ type: "text", text: `Variable ${name} added to group ${group_id}.` }],
     };
+  });
+
+  server.registerTool("get_webhook_url", {
+    description: "Get the incoming webhook URL for a Codemagic app. Paste this URL into your Git provider (GitHub, GitLab, or Bitbucket) repository settings to trigger builds automatically on push or pull request events.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      app_id: z.string().describe("The Codemagic app ID"),
+    },
+  }, async ({ app_id }) => {
+    const url = getWebhookUrl(app_id);
+    return {
+      content: [{ type: "text", text: `Webhook URL for app ${app_id}:\n${url}\n\nAdd this URL to your Git provider's repository webhook settings. Set the content type to application/json and select the push and pull request events you want to trigger builds.` }],
+    };
+  });
+
+  server.registerTool("list_webhooks", {
+    description: "List webhook subscriptions configured for a Codemagic app",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      app_id: z.string().describe("The Codemagic app ID"),
+    },
+  }, async ({ app_id }) => {
+    try {
+      const webhooks = await listWebhooks(apiToken, app_id);
+      if (webhooks.length === 0) {
+        return { content: [{ type: "text", text: "No webhooks configured for this app." }] };
+      }
+      return { content: [{ type: "text", text: JSON.stringify(webhooks, null, 2) }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+    }
+  });
+
+  server.registerTool("delete_webhook", {
+    description: "Delete a webhook subscription from a Codemagic app",
+    annotations: { destructiveHint: true },
+    inputSchema: {
+      app_id: z.string().describe("The Codemagic app ID"),
+      webhook_id: z.string().describe("The webhook ID to delete (from list_webhooks)"),
+    },
+  }, async ({ app_id, webhook_id }) => {
+    try {
+      await deleteWebhook(apiToken, app_id, webhook_id);
+      return { content: [{ type: "text", text: `Webhook ${webhook_id} deleted.` }] };
+    } catch (e) {
+      return { content: [{ type: "text", text: `Error: ${e instanceof Error ? e.message : String(e)}` }], isError: true };
+    }
   });
 
 }

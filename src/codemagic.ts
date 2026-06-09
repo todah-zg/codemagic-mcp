@@ -352,3 +352,57 @@ export async function addVariable(
     throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
   }
 }
+
+// ─── Webhooks ────────────────────────────────────────────────────────────────
+
+export interface Webhook {
+  _id: string;
+  appId: string;
+  url: string;
+  events: string[];
+  branchPatterns?: string[];
+}
+
+/**
+ * Get the incoming webhook URL for a Codemagic app.
+ * This is the URL you add to your Git provider (GitHub/GitLab/Bitbucket)
+ * to trigger builds automatically on push or pull request events.
+ * No API call is needed — the URL is derived from the app ID.
+ * @param appId - The Codemagic app ID.
+ * @returns The webhook URL to configure in the Git provider.
+ */
+export function getWebhookUrl(appId: string): string {
+  return `https://api.codemagic.io/hooks/${appId}`;
+}
+
+/**
+ * List all webhook subscriptions for a Codemagic app.
+ * @param apiToken - Codemagic API token.
+ * @param appId - The Codemagic app ID.
+ */
+export async function listWebhooks(apiToken: string, appId: string): Promise<Webhook[]> {
+  const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks`, {
+    headers: { "x-auth-token": apiToken },
+  });
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+  const data = await response.json() as { webhooks: Webhook[] };
+  return data.webhooks;
+}
+
+/**
+ * Delete a webhook subscription from a Codemagic app.
+ * @param apiToken - Codemagic API token.
+ * @param appId - The Codemagic app ID.
+ * @param webhookId - The webhook ID to delete.
+ */
+export async function deleteWebhook(apiToken: string, appId: string, webhookId: string): Promise<void> {
+  const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks/${webhookId}`, {
+    method: "DELETE",
+    headers: { "x-auth-token": apiToken },
+  });
+  if (!response.ok) {
+    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+  }
+}

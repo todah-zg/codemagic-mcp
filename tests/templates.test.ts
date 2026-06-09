@@ -10,7 +10,7 @@ describe("listYamlTemplateTypes", () => {
 
   it("includes all expected project types", () => {
     const types = listYamlTemplateTypes();
-    // original types
+    // production types
     expect(types).toContain("android");
     expect(types).toContain("ios");
     expect(types).toContain("flutter");
@@ -18,12 +18,15 @@ describe("listYamlTemplateTypes", () => {
     expect(types).toContain("ionic-capacitor");
     expect(types).toContain("ionic-cordova");
     expect(types).toContain("unity");
-    // new types
     expect(types).toContain("flutter-native");
     expect(types).toContain("kmm");
     expect(types).toContain("snap");
     expect(types).toContain("unity-oculus");
     expect(types).toContain("dotnet-maui");
+    // debug / onboarding types
+    expect(types).toContain("android-debug");
+    expect(types).toContain("flutter-android-debug");
+    expect(types).toContain("react-native-android-debug");
   });
 });
 
