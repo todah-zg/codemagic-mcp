@@ -104,35 +104,35 @@ export interface TriggerBuildParams {
 }
 
 export async function triggerBuild(
-  apiToken: string,
-  params: TriggerBuildParams,
-  yamlContent?: string
+    apiToken: string,
+    params: TriggerBuildParams,
+    yamlContent?: string
 ): Promise<string> {
-  let body: BodyInit;
-  const headers: Record<string, string> = { "x-auth-token": apiToken };
+    let body: BodyInit;
+    const headers: Record<string, string> = { "x-auth-token": apiToken };
 
-  if (yamlContent) {
-    const form = new FormData();
-    form.append("data", JSON.stringify(params));
-    form.append("config", new Blob([yamlContent], { type: "text/plain" }), "codemagic.yaml");
-    body = form;
-  } else {
-    body = JSON.stringify(params);
-    headers["Content-Type"] = "application/json";
-  }
+    if (yamlContent) {
+        const form = new FormData();
+        form.append("data", JSON.stringify(params));
+        form.append("config", new Blob([yamlContent], { type: "text/plain" }), "codemagic.yaml");
+        body = form;
+    } else {
+        body = JSON.stringify(params);
+        headers["Content-Type"] = "application/json";
+    }
 
-  const response = await fetch(`${BASE_URL_V1}/builds`, {
-    method: "POST",
-    headers,
-    body,
-  });
+    const response = await fetch(`${BASE_URL_V1}/builds`, {
+        method: "POST",
+        headers,
+        body,
+    });
 
-  if (!response.ok) {
-    throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
-  }
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
 
-  const data = await response.json() as { buildId: string };
-  return data.buildId;
+    const data = await response.json() as { buildId: string };
+    return data.buildId;
 }
 
 
@@ -197,15 +197,89 @@ export async function addApplication(
 const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
 
 export async function waitForBuild(
-  apiToken: string,
-  buildId: string,
-  intervalSeconds = 30
+    apiToken: string,
+    buildId: string,
+    intervalSeconds = 30
 ): Promise<Build> {
-  while (true) {
-    const build = await getBuild(apiToken, buildId);
-    if (TERMINAL_STATUSES.has(build.status)) {
-      return build;
+    while (true) {
+        const build = await getBuild(apiToken, buildId);
+        if (TERMINAL_STATUSES.has(build.status)) {
+            return build;
+        }
+        await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
     }
-    await new Promise(resolve => setTimeout(resolve, intervalSeconds * 1000));
-  }
+}
+
+
+export interface VariableGroup {
+    id: string;
+    name: string;
+}
+
+export async function listVariableGroups(
+    apiToken: string,
+    teamId?: string,
+    appId?: string
+): Promise<VariableGroup[]> {
+    const path = teamId
+        ? `/api/v3/teams/${teamId}/variable-groups`
+        : `/api/v3/apps/${appId}/variable-groups`;
+    const response = await fetch(`${BASE_URL_V3}${path}`, {
+        headers: { "x-auth-token": apiToken },
+    });
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json() as { data: VariableGroup[] };
+    return data.data;
+}
+
+export async function createVariableGroup(
+    apiToken: string,
+    name: string,
+    teamId?: string,
+    appId?: string
+): Promise<VariableGroup> {
+    const path = teamId
+        ? `/api/v3/teams/${teamId}/variable-groups`
+        : `/api/v3/apps/${appId}/variable-groups`;
+    const body: Record<string, unknown> = { name };
+    if (teamId) {
+        body.advanced_security = { enabled: false, selected_apps: [] };
+    }
+    const response = await fetch(`${BASE_URL_V3}${path}`, {
+        method: "POST",
+        headers: {
+            "x-auth-token": apiToken,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
+    const data = await response.json() as { data: VariableGroup };
+    return data.data;
+}
+
+export async function addVariable(
+    apiToken: string,
+    groupId: string,
+    name: string,
+    value: string
+): Promise<void> {
+    const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, {
+        method: "POST",
+        headers: {
+            "x-auth-token": apiToken,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            secure: false,
+            variables: [{ name, value }],
+        }),
+    });
+    if (!response.ok) {
+        throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
+    }
 }

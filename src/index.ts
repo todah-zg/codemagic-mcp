@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild } from "./codemagic.js";
+import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable } from "./codemagic.js";
 import { z } from "zod";
 import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight } from "./asc.js";
 import { validateCodemagicYaml, getYamlTemplate, listYamlTemplateTypes } from "./yaml.js";
@@ -400,6 +400,71 @@ server.registerTool("upload_to_google_play", {
   const result = await uploadToGooglePlay(aab_url, track, release_name, release_notes, release_notes_language, draft);
   return {
     content: [{ type: "text", text: `Published to Google Play (${track} track).\n${result}` }],
+  };
+});
+
+
+server.registerTool("list_variable_groups", {
+  description: "List variable groups for a team or app in Codemagic. Use group names to reference them in trigger_build. Secret values are never returned — manage secrets directly in the Codemagic UI.",
+  inputSchema: {
+    team_id: z.string().optional().describe("Team ID to list groups for"),
+    app_id: z.string().optional().describe("App ID to list groups for"),
+  },
+}, async ({ team_id, app_id }) => {
+  if (!team_id && !app_id) {
+    return {
+      content: [{ type: "text", text: "Error: either team_id or app_id must be provided." }],
+      isError: true,
+    };
+  }
+  const groups = await listVariableGroups(apiToken, team_id, app_id);
+  const text = groups.map(g => `${g.name} (${g.id})`).join("\n");
+  return {
+    content: [{ type: "text", text: text || "No variable groups found." }],
+  };
+});
+
+
+server.registerTool("create_variable_group", {
+  description: "Create a new variable group in Codemagic for a team or app. After creating, add non-secret variables via add_variable, or add secret values directly in the Codemagic UI. Requires a team_id (personal accounts do not support global variable groups) or an app_id for app-level groups.",
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+  },
+  inputSchema: {
+    name: z.string().describe("Name of the variable group"),
+    team_id: z.string().optional().describe("Team ID to create the group under"),
+    app_id: z.string().optional().describe("App ID to create the group under"),
+  },
+}, async ({ name, team_id, app_id }) => {
+  if (!team_id && !app_id) {
+    return {
+      content: [{ type: "text", text: "Error: either team_id or app_id must be provided." }],
+      isError: true,
+    };
+  }
+  const group = await createVariableGroup(apiToken, name, team_id, app_id);
+  return {
+    content: [{ type: "text", text: `Variable group created: ${group.name} (${group.id})` }],
+  };
+});
+
+
+server.registerTool("add_variable", {
+  description: "Add a non-secret variable to a Codemagic variable group. For secret values (API keys, certificates, tokens) use the Codemagic UI instead — secrets should never pass through the agent.",
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+  },
+  inputSchema: {
+    group_id: z.string().describe("The variable group ID to add the variable to"),
+    name: z.string().describe("Variable name, e.g. FLUTTER_VERSION"),
+    value: z.string().describe("Variable value"),
+  },
+}, async ({ group_id, name, value }) => {
+  await addVariable(apiToken, group_id, name, value);
+  return {
+    content: [{ type: "text", text: `Variable ${name} added to group ${group_id}.` }],
   };
 });
 
