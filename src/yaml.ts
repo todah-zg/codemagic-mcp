@@ -6,6 +6,10 @@ const ajv = new Ajv({ allErrors: true });
 
 let schema: object | null = null;
 
+/**
+ * Fetch and cache the official Codemagic JSON schema.
+ * The schema is fetched once and reused for subsequent validations.
+ */
 async function getSchema(): Promise<object> {
   if (schema) return schema;
   const response = await fetch("https://codemagic.io/codemagic-schema.json");
@@ -21,6 +25,12 @@ export interface ValidationResult {
   errors: string[];
 }
 
+/**
+ * Validate a codemagic.yaml string against the official Codemagic JSON schema.
+ * The schema is fetched from codemagic.io on first call and cached for subsequent calls.
+ * @param yamlContent - Full contents of a codemagic.yaml file.
+ * @returns Validation result with a list of error messages if invalid.
+ */
 export async function validateCodemagicYaml(yamlContent: string): Promise<ValidationResult> {
   let parsed: unknown;
   try {

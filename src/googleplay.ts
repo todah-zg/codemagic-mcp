@@ -7,11 +7,18 @@ import { join } from "node:path";
 const execFileAsync = promisify(execFile);
 
 
+/**
+ * Run a `google-play` CLI command and parse its JSON output.
+ * Requires GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS to be set in the environment
+ * (raw JSON content of the service account key file).
+ * Some commands print a human-readable summary line before the JSON — this
+ * function handles that by finding the first [ or { in the output.
+ * @param args - CLI arguments, e.g. ["tracks", "list", "--package-name", "com.example"].
+ * @returns Parsed JSON response from the CLI.
+ */
 async function runGooglePlay<T>(args: string[]): Promise<T> {
   try {
     const { stdout } = await execFileAsync("google-play", [...args, "--json"]);
-    // Some commands print a human-readable summary line before the JSON.
-    // Find the first [ or { and parse from there.
     const jsonStart = stdout.search(/[\[{]/);
     if (jsonStart === -1) throw new Error("No JSON found in output");
     return JSON.parse(stdout.slice(jsonStart)) as T;
@@ -23,7 +30,7 @@ async function runGooglePlay<T>(args: string[]): Promise<T> {
 }
 
 
-interface GooglePlayRelease {
+export interface GooglePlayRelease {
   status: string;
   name: string;
   versionCodes: string[];
@@ -35,10 +42,14 @@ export interface GooglePlayTrack {
   releases?: GooglePlayRelease[];
 }
 
+/**
+ * List Google Play tracks for an app (internal, alpha, beta, production),
+ * including release info for any track that has releases.
+ * @param packageName - The Android package name, e.g. com.example.myapp.
+ */
 export async function listTracks(packageName: string): Promise<GooglePlayTrack[]> {
   return runGooglePlay<GooglePlayTrack[]>(["tracks", "list", "--package-name", packageName]);
 }
-
 
 export interface GooglePlayBundle {
   versionCode: number;
@@ -46,11 +57,25 @@ export interface GooglePlayBundle {
   sha256: string;
 }
 
+/**
+ * List uploaded App Bundles (AAB) for an app on Google Play.
+ * @param packageName - The Android package name, e.g. com.example.myapp.
+ */
 export async function listBundles(packageName: string): Promise<GooglePlayBundle[]> {
   return runGooglePlay<GooglePlayBundle[]>(["bundles", "list", "--package-name", packageName]);
 }
 
-
+/**
+ * Download an AAB from a URL and publish it to a Google Play track.
+ * The AAB is saved to a temp file, published via the google-play CLI, then deleted.
+ * The package name is extracted from the AAB automatically — no need to provide it.
+ * @param aabUrl - Direct download URL for the AAB (e.g. a Codemagic artifact URL).
+ * @param track - Target track: internal, alpha, beta, or production.
+ * @param releaseName - Optional release name. Defaults to the AAB's version name.
+ * @param releaseNotes - Optional release notes as plain text.
+ * @param releaseNotesLanguage - BCP-47 language tag for release notes (default: en-US).
+ * @param draft - If true, upload as a draft release instead of publishing immediately.
+ */
 export async function uploadToGooglePlay(
   aabUrl: string,
   track: string,

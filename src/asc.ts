@@ -4,9 +4,15 @@ import { writeFile, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-
 const execFileAsync = promisify(execFile);
 
+/**
+ * Run an `asc` CLI command and parse its JSON output.
+ * Requires ASC_KEY_ID, ASC_ISSUER_ID, ASC_PRIVATE_KEY_B64, and ASC_BYPASS_KEYCHAIN=1
+ * to be set in the environment.
+ * @param args - CLI arguments, e.g. ["apps", "list"].
+ * @returns Parsed JSON response from the CLI.
+ */
 export async function runAsc<T>(args: string[]): Promise<T> {
   try {
     const { stdout } = await execFileAsync("asc", [...args, "--output", "json"]);
@@ -15,7 +21,6 @@ export async function runAsc<T>(args: string[]): Promise<T> {
     throw new Error(`asc ${args[0]} failed: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
-
 
 export interface AscAppRaw {
   id: string;
@@ -32,6 +37,7 @@ export interface AscApp {
   bundleId: string;
 }
 
+/** List all apps in App Store Connect. */
 export async function listAscApps(): Promise<AscApp[]> {
   const response = await runAsc<{ data: AscAppRaw[] }>(["apps", "list"]);
   return response.data.map(app => ({
@@ -40,7 +46,6 @@ export async function listAscApps(): Promise<AscApp[]> {
     bundleId: app.attributes.bundleId,
   }));
 }
-
 
 interface AscBuildRaw {
   id: string;
@@ -60,6 +65,10 @@ export interface AscBuild {
   expired: boolean;
 }
 
+/**
+ * List TestFlight builds for an app in App Store Connect.
+ * @param appId - The App Store Connect app ID.
+ */
 export async function listAscBuilds(appId: string): Promise<AscBuild[]> {
   const response = await runAsc<{ data: AscBuildRaw[] }>(["builds", "list", "--app", appId]);
   return response.data.map(b => ({
@@ -87,6 +96,10 @@ export interface AscBetaGroup {
   feedbackEnabled: boolean;
 }
 
+/**
+ * List TestFlight beta groups for an app.
+ * @param appId - The App Store Connect app ID.
+ */
 export async function listTestFlightGroups(appId: string): Promise<AscBetaGroup[]> {
   const response = await runAsc<{ data: AscBetaGroupRaw[] }>(["testflight", "groups", "list", "--app", appId]);
   return response.data.map(g => ({
@@ -110,10 +123,13 @@ export interface AscReviewStatus {
   } | null;
 }
 
+/**
+ * Get the current App Store review status for an app.
+ * @param appId - The App Store Connect app ID.
+ */
 export async function getReviewStatus(appId: string): Promise<AscReviewStatus> {
   return runAsc<AscReviewStatus>(["review", "status", "--app", appId]);
 }
-
 
 export interface AscReleaseStatus {
   app: {
@@ -149,10 +165,21 @@ export interface AscReleaseStatus {
   };
 }
 
+/**
+ * Get a full release pipeline status for an app — builds, TestFlight, App Store, and submission state.
+ * @param appId - The App Store Connect app ID.
+ */
 export async function getReleaseStatus(appId: string): Promise<AscReleaseStatus> {
   return runAsc<AscReleaseStatus>(["status", "--app", appId]);
 }
 
+/**
+ * Download an IPA from a URL and upload it to TestFlight.
+ * The IPA is saved to a temp file, uploaded via the asc CLI, then deleted.
+ * @param appId - The App Store Connect app ID.
+ * @param ipaUrl - Direct download URL for the IPA (e.g. a Codemagic artifact URL).
+ * @param betaGroup - Optional TestFlight beta group name to distribute to after upload.
+ */
 export async function uploadToTestFlight(
   appId: string,
   ipaUrl: string,
@@ -173,6 +200,6 @@ export async function uploadToTestFlight(
     const { stdout } = await execFileAsync("asc", args);
     return stdout;
   } finally {
-    await unlink(tempPath).catch(() => { });
+    await unlink(tempPath).catch(() => {});
   }
 }

@@ -119,8 +119,8 @@ The config file is at:
 | `list_asc_apps` | List apps in App Store Connect |
 | `list_asc_builds` | List TestFlight builds for an app |
 | `list_testflight_groups` | List TestFlight beta groups |
-| `get_review_status` | Get the App Store review state for an app |
-| `get_release_status` | Full release pipeline dashboard (builds, TestFlight, App Store) |
+| `get_asc_review_status` | Get the App Store review state for an app |
+| `get_asc_release_status` | Full release pipeline dashboard (builds, TestFlight, App Store) |
 | `upload_to_testflight` | Download an IPA from Codemagic and upload to TestFlight |
 
 ### Google Play (Android)

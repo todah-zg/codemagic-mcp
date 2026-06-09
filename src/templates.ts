@@ -275,10 +275,20 @@ export const TEMPLATES: Record<string, string> = {
       - platforms/android/app/build/outputs/**/*.apk`,
 };
 
+/**
+ * Get a starter codemagic.yaml template for a given project type.
+ * Templates cover build and signing only — publishing is handled via ASC/Google Play tools.
+ * @param projectType - One of the supported project types (see listYamlTemplateTypes).
+ * @returns The yaml template string, or null if the project type is not recognised.
+ */
 export function getYamlTemplate(projectType: string): string | null {
   return TEMPLATES[projectType] ?? null;
 }
 
+/**
+ * List all supported project type keys for yaml templates.
+ * @returns Array of project type strings, e.g. ["flutter", "react-native", ...].
+ */
 export function listYamlTemplateTypes(): string[] {
   return Object.keys(TEMPLATES);
 }
