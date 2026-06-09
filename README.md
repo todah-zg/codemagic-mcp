@@ -6,7 +6,7 @@ An MCP (Model Context Protocol) server that gives AI agents a unified surface ov
 
 The server exposes tools across three domains:
 
-- **Codemagic** — list apps, trigger builds, wait for results, retrieve artifacts
+- **Codemagic** — list apps, trigger builds, wait for results, retrieve artifacts, manage variable groups
 - **App Store Connect** — list builds, manage TestFlight groups, check review/release status, upload IPAs
 - **Google Play** — list tracks, list bundles, publish AABs to any track
 
@@ -131,6 +131,14 @@ The config file is at:
 | `list_google_play_bundles` | List uploaded AABs by version code |
 | `upload_to_google_play` | Download an AAB from Codemagic and publish to a Google Play track |
 
+### Variable Groups
+
+| Tool | Description |
+|------|-------------|
+| `list_variable_groups` | List variable groups for a team or app — use group names to reference them in builds |
+| `create_variable_group` | Create a new variable group (team or app scoped) |
+| `add_variable` | Add a non-secret variable to a group |
+
 ### YAML
 
 | Tool | Description |
@@ -143,3 +151,4 @@ The config file is at:
 - **Inline YAML:** `trigger_build` accepts an optional `yaml_content` parameter. When provided, the YAML is uploaded alongside the build request and does not need to exist in the repository. Useful for agent-generated configurations.
 - **Signing:** iOS signing happens on the Codemagic build machine (macOS + keychain). The MCP server never handles signing identities directly.
 - **Team vs. personal account:** `list_applications` and `list_builds` accept an optional `team_id`. Without it, they operate on the authenticated user's personal account.
+- **Variable groups and secrets:** `add_variable` only creates non-secret variables. Secret values (API keys, certificates, tokens) should be added directly in the Codemagic UI — secrets should never pass through the agent. Once set up, reference groups by name in `trigger_build` via the `groups` parameter.
