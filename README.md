@@ -149,6 +149,7 @@ The config file is at:
 | `validate_codemagic_yaml` | Validate a `codemagic.yaml` against the official Codemagic JSON schema |
 | `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, dotnet-maui — plus android-debug, flutter-android-debug, react-native-android-debug for initial onboarding |
 | `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
+| `detect_project_type` | Detect the project type from a repository file listing — returns the recommended template and debug template to start with |
 
 ### Prompts
 
@@ -170,6 +171,7 @@ src/
   googleplay.ts         — Google Play CLI wrapper
   yaml.ts               — YAML validation logic
   templates.ts          — Static codemagic.yaml templates
+  detection.ts          — Project type detection from repository file listings
   prompts.ts            — MCP prompt resources (workflow playbooks)
   tools/
     codemagic.ts        — Codemagic MCP tool registrations

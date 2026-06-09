@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { validateCodemagicYaml, getYamlTemplate, listYamlTemplateTypes } from "../yaml.js";
+import { detectProjectType } from "../detection.js";
 
 
 export function registerYamlTools(server: McpServer): void {
@@ -64,6 +65,29 @@ export function registerYamlTools(server: McpServer): void {
     const types = listYamlTemplateTypes();
     return {
       content: [{ type: "text", text: types.join("\n") }],
+    };
+  });
+
+  server.registerTool("detect_project_type", {
+    description: "Detect the Codemagic project type from a repository file listing. Returns the recommended template type, confidence level, and the suggested debug template to use for initial onboarding. For JavaScript/TypeScript projects, providing package.json content significantly improves accuracy.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      file_paths: z.array(z.string()).describe("File paths in the repository relative to the root. Include at least two directory levels for best results."),
+      package_json_content: z.string().optional().describe("Content of package.json if present — used to detect React Native vs Ionic by inspecting dependencies"),
+    },
+  }, async ({ file_paths, package_json_content }) => {
+    const result = detectProjectType(file_paths, package_json_content);
+    const lines = [
+      `Detected project type: ${result.projectType}`,
+      `Confidence: ${result.confidence}`,
+      `Reasoning: ${result.reasoning}`,
+    ];
+    if (result.suggestedDebugTemplate) {
+      lines.push(`\nSuggested first step: call get_yaml_template with project_type="${result.suggestedDebugTemplate}" for an initial debug build.`);
+      lines.push(`Once that build passes, use project_type="${result.projectType}" for release builds.`);
+    }
+    return {
+      content: [{ type: "text", text: lines.join("\n") }],
     };
   });
 
