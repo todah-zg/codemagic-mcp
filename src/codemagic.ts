@@ -387,8 +387,8 @@ export async function listWebhooks(apiToken: string, appId: string): Promise<Web
   if (!response.ok) {
     throw new Error(`Codemagic API error: ${response.status} ${response.statusText}`);
   }
-  const data = await response.json() as { webhooks: Webhook[] };
-  return data.webhooks;
+  const data = await response.json() as Webhook[];
+  return data;
 }
 
 /**
