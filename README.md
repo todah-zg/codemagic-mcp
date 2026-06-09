@@ -145,6 +145,27 @@ The config file is at:
 |------|-------------|
 | `validate_codemagic_yaml` | Validate a `codemagic.yaml` against the official Codemagic JSON schema |
 | `get_yaml_template` | Get a starter `codemagic.yaml` for flutter, react-native, ios, android, unity, ionic-capacitor, or ionic-cordova |
+| `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
+
+## Project structure
+
+```
+src/
+  index.ts              — Server setup, env validation, transport
+  codemagic.ts          — Codemagic API functions
+  asc.ts                — App Store Connect CLI wrapper
+  googleplay.ts         — Google Play CLI wrapper
+  yaml.ts               — YAML validation logic
+  templates.ts          — Static codemagic.yaml templates
+  tools/
+    codemagic.ts        — Codemagic MCP tool registrations
+    asc.ts              — App Store Connect MCP tool registrations
+    googleplay.ts       — Google Play MCP tool registrations
+    yaml.ts             — YAML MCP tool registrations
+```
+
+The `src/` modules contain pure functions (API calls, CLI wrappers) with no MCP dependency.
+The `src/tools/` modules wire those functions up as MCP tools — input schemas, formatting, error responses.
 
 ## Notes
 
