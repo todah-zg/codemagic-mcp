@@ -4,17 +4,18 @@ An MCP (Model Context Protocol) server that gives AI agents a unified surface ov
 
 ## What it does
 
-The server exposes tools across three domains:
+The server exposes tools across four domains:
 
-- **Codemagic** — list apps, trigger builds, wait for results, retrieve artifacts, manage variable groups
-- **App Store Connect** — list builds, manage TestFlight groups, check review/release status, upload IPAs
-- **Google Play** — list tracks, list bundles, publish AABs to any track
+- **Codemagic** — list teams and apps, trigger builds, wait for results, retrieve artifacts, fetch build logs, manage variable groups and webhooks
+- **App Store Connect** — list builds, manage TestFlight, check review/release status, upload IPAs, set metadata, validate, submit, and release to the App Store
+- **Google Play** — list tracks, publish AABs, promote releases, manage staged rollouts, share builds internally
+- **Cross-store** — validate localized release notes against platform char limits and BCP-47 locale codes
 
 The intended end-to-end flows are:
 
-**iOS:** `list_asc_builds` (get next build number) → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_testflight`
+**iOS:** `list_asc_builds` → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_testflight` → `set_version_metadata` → `validate_app_submission` → `publish_to_app_store` → `release_version`
 
-**Android:** `list_google_play_tracks` (get next build number) → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_google_play`
+**Android:** `get_latest_build_number` → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_google_play` → `promote_google_play_release`
 
 ## Prerequisites
 
@@ -195,14 +196,16 @@ You can also describe what you want in plain language — Claude will select the
 | Tool | Description |
 |------|-------------|
 | `ping` | Check that the server is running |
+| `list_teams` | List teams the authenticated account belongs to |
 | `list_applications` | List apps in your Codemagic account or team |
 | `list_workflows` | List workflows for an app |
 | `list_builds` | List builds with optional filters (app, status, branch, workflow) |
 | `get_build` | Get full details for a single build including artifacts |
+| `get_build_logs` | Fetch per-step log text for a build — by default returns failed steps only |
 | `trigger_build` | Trigger a build; optionally supply an inline `codemagic.yaml` |
 | `wait_for_build` | Poll until a build reaches a terminal state; returns artifacts |
 | `cancel_build` | Cancel a running or queued build |
-| `add_application` | Connect a Git repository to Codemagic |
+| `add_application` | Connect a Git repository to Codemagic; auto-generates SSH deploy keys for SSH URLs |
 | `get_webhook_url` | Get the incoming webhook URL to paste into your Git provider settings |
 | `list_webhooks` | List webhook subscriptions configured for an app |
 | `delete_webhook` | Delete a webhook subscription from an app |
@@ -217,6 +220,15 @@ You can also describe what you want in plain language — Claude will select the
 | `get_asc_review_status` | Get the App Store review state for an app |
 | `get_asc_release_status` | Full release pipeline dashboard (builds, TestFlight, App Store) |
 | `upload_to_testflight` | Download an IPA from Codemagic and upload to TestFlight |
+| `submit_beta_review` | Submit a TestFlight build for external beta review (required before external groups) |
+| `add_testflight_tester` | Add a tester by email to TestFlight, optionally to a group |
+| `create_testflight_group` | Create an internal or external TestFlight beta group |
+| `set_export_compliance` | Declare encryption usage for a build (required before App Store submission) |
+| `set_version_metadata` | Set "What's New" text and other per-locale metadata for an App Store version |
+| `validate_app_submission` | Preflight check — returns an ordered list of blockers before submission |
+| `publish_to_app_store` | Upload IPA and optionally submit for review (long-running: 20–40 min) |
+| `release_version` | Release an approved App Store version immediately |
+| `set_phased_release` | Create, pause, resume, or complete a phased rollout |
 
 ### Google Play (Android)
 
@@ -225,6 +237,16 @@ You can also describe what you want in plain language — Claude will select the
 | `list_google_play_tracks` | List tracks (internal, alpha, beta, production) with release info |
 | `list_google_play_bundles` | List uploaded AABs by version code |
 | `upload_to_google_play` | Download an AAB from Codemagic and publish to a Google Play track |
+| `get_latest_build_number` | Get the highest version code across all (or specified) tracks |
+| `promote_google_play_release` | Promote a release between tracks (internal → alpha → beta → production) |
+| `set_rollout_fraction` | Expand, halt, or resume a staged rollout by setting the user fraction |
+| `share_app_internally` | Upload an AAB to Internal App Sharing for instant QA install links |
+
+### Cross-store
+
+| Tool | Description |
+|------|-------------|
+| `prepare_release_notes` | Validate localized release notes — checks BCP-47 locale codes and char limits (Android: 500, iOS: 4000) |
 
 ### Variable Groups
 
@@ -248,8 +270,8 @@ You can also describe what you want in plain language — Claude will select the
 | Prompt | Description |
 |--------|-------------|
 | `onboarding` | Zero to first debug build — add repo, get template, trigger build, configure webhook |
-| `android_release` | Signed AAB from build to Google Play — build number, template, trigger, publish |
-| `ios_release` | Signed IPA from build to TestFlight — build number, template, trigger, upload |
+| `android_release` | Signed AAB from build to Google Play — build number, template, trigger, publish, promote |
+| `ios_release` | Signed IPA from build to App Store — build number, template, trigger, TestFlight, metadata, validate, submit, release |
 
 Prompts are reusable workflow playbooks. In Claude Desktop they appear as slash commands. An agent can also invoke them by name to get step-by-step instructions for a complete workflow.
 
@@ -258,9 +280,10 @@ Prompts are reusable workflow playbooks. In Claude Desktop they appear as slash 
 ```
 src/
   index.ts              — Server setup, env validation, transport
-  codemagic.ts          — Codemagic API functions
+  codemagic.ts          — Codemagic API functions (v3 + v1)
   asc.ts                — App Store Connect CLI wrapper
   googleplay.ts         — Google Play CLI wrapper
+  ssh.ts                — SSH key generation and deploy key setup
   yaml.ts               — YAML validation logic
   templates.ts          — Static codemagic.yaml templates
   detection.ts          — Project type detection from repository file listings
@@ -270,6 +293,7 @@ src/
     asc.ts              — App Store Connect MCP tool registrations
     googleplay.ts       — Google Play MCP tool registrations
     yaml.ts             — YAML MCP tool registrations
+    releasenotes.ts     — Release notes validation tool
 ```
 
 The `src/` modules contain pure functions (API calls, CLI wrappers) with no MCP dependency.

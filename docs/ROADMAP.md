@@ -17,12 +17,14 @@ templates, project-type detection, three workflow prompts, webhook management,
 29 passing tests. Full loop proven: onboard repo → debug build → release build →
 TestFlight / Google Play.
 
-**Phase 2:** Complete publishing loop on both platforms. iOS adds: `publish_to_app_store`,
-`validate_app_submission`, `set_version_metadata`, `set_export_compliance`,
-`release_version`, `set_phased_release`, `submit_beta_review`, `add_testflight_tester`,
-`create_testflight_group`. Android adds: `promote_google_play_release`,
-`set_rollout_fraction`, `share_app_internally`, `get_latest_build_number`.
-Both `/ios_release` and `/android_release` prompts updated end-to-end.
+**Phase 2:** Complete publishing loop on both platforms, plus build diagnostics and
+release note validation. iOS adds: `publish_to_app_store`, `validate_app_submission`,
+`set_version_metadata`, `set_export_compliance`, `release_version`, `set_phased_release`,
+`submit_beta_review`, `add_testflight_tester`, `create_testflight_group`. Android adds:
+`promote_google_play_release`, `set_rollout_fraction`, `share_app_internally`,
+`get_latest_build_number`. Codemagic adds: `list_teams`, `get_build_logs`.
+Cross-store adds: `prepare_release_notes`. Both `/ios_release` and `/android_release`
+prompts updated end-to-end.
 
 What we can NOT do today: manage store **listings** (descriptions, screenshots, metadata),
 generate store assets, or guide a first-time publisher through the parts that genuinely
@@ -63,13 +65,13 @@ locally via `asc capabilities`). New tools, in priority order:
 
 | Tool | Notes |
 |---|---|
-| `prepare_release_notes` | Read-only: takes a git commit range (or infers it from the last store release), drafts localized release notes. Validates the 500-char Google Play limit and BCP-47 codes. The LLM writes; the tool fetches inputs and validates output. |
+| `prepare_release_notes` | ✓ complete — validates BCP-47 locale codes and char limits (Android: 500, iOS: 4000). The LLM writes the notes; the tool validates them before submission. Git commit fetching deferred (requires per-provider auth complexity not worth the trade-off). |
 
 ### Diagnostic tools
 
 | Tool | Notes |
 |---|---|
-| `get_build_logs` | Fetch logs for a build — enables the agent to diagnose failures (missing dependency, signing error, bad YAML) and propose a fix without human intervention. API endpoint TBD; log output may need truncation or step-level filtering for large builds. |
+| `get_build_logs` | ✓ complete — fetches per-step log text via the v1 API. Returns failed steps by default; optional `step_name` filter for specific steps. Logs truncated at 20k chars (tail). |
 
 **Build page URL:** `trigger_build` should also return the direct Codemagic build URL (`https://codemagic.io/app/{appId}/build/{buildId}`), constructable from data already in hand — no extra API call. The user can open it immediately to watch the build in real time.
 
@@ -82,8 +84,9 @@ Gaps identified via competitive analysis (June 2026):
 
 | Tool | Priority | Notes |
 |---|---|---|
-| `cancel_build` | High — in this release | If an agent triggers the wrong build, it has no way to stop it. One POST call. |
-| `get_user` / `list_teams` | High | The agent can't discover which teams the token belongs to — `list_builds` requires a `team_id` that must be known in advance. `list_teams` solves the discovery problem. |
+| `cancel_build` | ✓ complete | If an agent triggers the wrong build, it has no way to stop it. One POST call. |
+| `get_user` / `list_teams` | ✓ complete | The agent can't discover which teams the token belongs to — `list_builds` requires a `team_id` that must be known in advance. `list_teams` solves the discovery problem. |
+| `get_build_logs` | ✓ complete | Fetch per-step log text via v1 API (`api.codemagic.io/builds/{id}/step/{step_id}`). |
 | Instance type on `trigger_build` | Medium | Templates hardcode the machine type; the agent can't override it without editing the full YAML. An `instance_type` parameter would allow a one-line override at trigger time. |
 | `update_variable` / `delete_variable` | Low | CRUD completeness for variable management |
 | `list_caches` / `delete_caches` | Low | Useful when debugging slow builds or storage exhaustion |
