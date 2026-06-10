@@ -81,7 +81,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "codemagic": {
       "command": "npx",
-      "args": ["-y", "codemagic-mcp"],
+      "args": ["-y", "codemagic-mcp-server"],
       "env": {
         "CODEMAGIC_API_TOKEN": "your-token",
         "ASC_KEY_ID": "your-key-id",
@@ -102,7 +102,7 @@ Add to your `claude_desktop_config.json`:
   "mcpServers": {
     "codemagic": {
       "command": "node",
-      "args": ["/absolute/path/to/codemagic-mcp/dist/index.js"],
+      "args": ["/absolute/path/to/codemagic-mcp-server/dist/index.js"],
       "env": {
         "CODEMAGIC_API_TOKEN": "your-token",
         "ASC_KEY_ID": "your-key-id",
