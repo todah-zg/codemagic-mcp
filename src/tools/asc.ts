@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight } from "../asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, publishToAppStore } from "../asc.js";
 
 export function registerAscTools(server: McpServer): void {
 
@@ -104,6 +104,41 @@ export function registerAscTools(server: McpServer): void {
     const result = await uploadToTestFlight(app_id, ipa_url, beta_group);
     return {
       content: [{ type: "text", text: `Upload complete.\n${result}` }],
+    };
+  });
+
+  server.registerTool("publish_to_app_store", {
+    description:
+      "Download an IPA artifact from Codemagic and publish it to the App Store. " +
+      "Uploads the IPA, waits for Apple build processing (5–15 min), and attaches the build to the App Store version. " +
+      "WARNING: this is a long-running operation — the full call can take 20–40 minutes. " +
+      "Set submit_for_review to true to also submit for review in the same call — only do this when " +
+      "version metadata (What's New text) and export compliance are already set. " +
+      "After uploading without submitting, use get_asc_release_status to verify readiness.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      ipa_url: z.string().describe("The IPA download URL from a Codemagic build artifact"),
+      version: z.string().optional().describe("App Store version string e.g. '1.2.3' — defaults to the version embedded in the IPA"),
+      submit_for_review: z.boolean().optional().describe("Submit for App Store review after attaching the build (default: false)"),
+    },
+  }, async ({ app_id, ipa_url, version, submit_for_review }) => {
+    const result = await publishToAppStore(app_id, ipa_url, version, submit_for_review ?? false);
+    const lines = [
+      submit_for_review
+        ? "IPA uploaded and submitted for App Store review."
+        : "IPA uploaded and attached to App Store version.",
+      result,
+      "",
+      submit_for_review
+        ? "Track review progress with get_asc_review_status."
+        : "Next: call get_asc_release_status to verify readiness, then call publish_to_app_store again with submit_for_review=true when ready.",
+    ];
+    return {
+      content: [{ type: "text", text: lines.join("\n") }],
     };
   });
 

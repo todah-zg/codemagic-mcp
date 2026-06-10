@@ -217,3 +217,41 @@ export async function uploadToTestFlight(
     await unlink(tempPath).catch(() => { });
   }
 }
+
+/**
+ * Download an IPA from a URL and publish it to the App Store via the asc CLI.
+ * Uploads the IPA, waits for build processing, creates/finds the App Store version,
+ * and attaches the build. Pass submitForReview=true to also submit for review.
+ * @param appId - The App Store Connect app ID.
+ * @param ipaUrl - Direct download URL for the IPA (e.g. a Codemagic artifact URL).
+ * @param version - App Store version string (e.g. "1.2.3"). Defaults to version in IPA.
+ * @param submitForReview - If true, submits for App Store review after attaching the build.
+ */
+export async function publishToAppStore(
+  appId: string,
+  ipaUrl: string,
+  version?: string,
+  submitForReview = false,
+): Promise<string> {
+  const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
+
+  const response = await fetch(ipaUrl);
+  if (!response.ok) {
+    throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
+  }
+  if (!response.body) throw new Error("IPA response body is empty");
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
+
+  try {
+    const args = ["publish", "appstore", "--app", appId, "--ipa", tempPath, "--wait"];
+    if (version) args.push("--version", version);
+    if (submitForReview) args.push("--submit", "--confirm");
+    const { stdout } = await execFileAsync("asc", args, {
+      maxBuffer: EXEC_BUFFER,
+      timeout: UPLOAD_TIMEOUT_MS,
+    });
+    return stdout;
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
+}

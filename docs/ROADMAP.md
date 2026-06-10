@@ -97,6 +97,16 @@ The re-entrant "call again" pattern we shipped is correct in structure. But seve
 
 **Phase 5 (hosted) fully solves this:** the hosted server can maintain server-side build-monitoring jobs. `trigger_build` registers a job; `wait_for_build` polls the job's resolved state server-side. The agent gets build completion without holding a connection open for 40 minutes. Codemagic already has this infrastructure.
 
+### Long-running App Store operations
+
+`publish_to_app_store` has the same impedance mismatch. The current implementation uses `asc publish appstore --wait`, which blocks for the full upload + Apple build processing + version attachment — up to 40 minutes in one tool call. This works with Claude Desktop today (no hard timeout), but is fragile for any client that enforces a timeout.
+
+The correct fix is to split into two steps:
+1. **Upload only** — `asc builds upload --app … --ipa …` (no `--wait`), returns in ~2 minutes with the build in processing state. A `build_number` or build ID is returned for polling.
+2. **Attach + submit** — a separate call once the agent observes `processingState: VALID` via `list_asc_builds` or `get_asc_release_status`. Then attaches the build to the App Store version and optionally submits.
+
+This mirrors the `wait_for_build` re-entrant pattern: fast initial action, agent polls for completion, then acts on the result.
+
 ---
 
 ## Phase 3 — Store presence (listings & assets)
