@@ -109,8 +109,9 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       environment: { variables, groups },
       labels: labels ?? [],
     }, yaml_content);
+    const buildUrl = `https://codemagic.io/app/${app_id}/build/${buildId}`;
     return {
-      content: [{ type: "text", text: `Build triggered successfully. Build ID: ${buildId}` }],
+      content: [{ type: "text", text: `Build triggered. Build ID: ${buildId}\n${buildUrl}` }],
     };
   });
 
