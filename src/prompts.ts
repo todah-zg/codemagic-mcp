@@ -10,27 +10,33 @@ Signing, release builds, and store publishing come after this succeeds.
    Call add_application with the repository URL.
    Note the app_id returned.
 
-2. GET A DEBUG TEMPLATE
+2. DETECT THE PROJECT TYPE
+   If you have a listing of the repository's files, call detect_project_type
+   with that list. It returns a debugTemplate field — use that value as the
+   type in step 3.
+   If you do not have the file listing, skip this step and pick the type manually.
+
+3. GET A DEBUG TEMPLATE
    Call get_yaml_template with the matching debug project type:
      android-debug, flutter-android-debug, or react-native-android-debug.
    Replace PACKAGE_NAME with the actual application ID.
 
-3. VALIDATE THE YAML
+4. VALIDATE THE YAML
    Call validate_codemagic_yaml with the edited yaml.
    Fix any errors before proceeding.
 
-4. TRIGGER THE FIRST BUILD
+5. TRIGGER THE FIRST BUILD
    Call trigger_build with:
      app_id    — from step 1
      workflow_id — the workflow name inside the yaml (e.g. "android-debug")
      branch    — the default branch (main or master)
      yaml_content — the validated yaml from step 2
 
-5. WAIT FOR THE RESULT
+6. WAIT FOR THE RESULT
    Call wait_for_build with the build ID.
    A green build means the project compiles on Codemagic.
 
-6. CONFIGURE WEBHOOKS (optional)
+7. CONFIGURE WEBHOOKS (optional)
    Call get_webhook_url with the app ID.
    Add the returned URL to the repository webhook settings in GitHub/GitLab/Bitbucket
    to enable automatic builds on push.

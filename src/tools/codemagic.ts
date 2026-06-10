@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listApplications, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
+import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
   server.registerTool("ping", {
@@ -155,7 +156,11 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("add_application", {
-    description: "Add a new application to Codemagic by connecting a Git repository. For private repositories, use HTTPS with a token in the URL, or add the deploy key via the Codemagic UI after connecting. Note: after adding, the app shows 'Set up build' in the UI — this is expected.",
+    description:
+      "Add a new application to Codemagic by connecting a Git repository. " +
+      "For HTTPS URLs: if you have connected your GitHub, GitLab, or Bitbucket account via Codemagic Settings → Integrations, private repositories are accessible with just the URL — no credentials needed. " +
+      "For SSH URLs (git@... or ssh://git@...): a fresh Ed25519 deploy key is generated automatically. The private key is stored directly in Codemagic and the public key is added to GitHub automatically if the gh CLI is installed and authenticated, or shown for manual setup otherwise. " +
+      "Note: after adding, the app shows 'Set up build' in the Codemagic UI — this is expected.",
     annotations: {
       readOnlyHint: false,
       destructiveHint: false,
@@ -165,9 +170,39 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       team_id: z.string().optional().describe("Team ID to add the app to"),
     },
   }, async ({ repository_url, team_id }) => {
-    const app = await addApplication(apiToken, repository_url, team_id);
+    const isSSH = repository_url.startsWith("git@") || repository_url.startsWith("ssh://git@");
+
+    if (!isSSH) {
+      const app = await addApplication(apiToken, repository_url, team_id);
+      return {
+        content: [{ type: "text", text: `Application added: ${app.appName} (${app.id})` }],
+      };
+    }
+
+    // SSH URL — generate a deploy key, send the private key to Codemagic, expose the public key
+    const keyPair = await generateSSHKeyPair();
+    const sshKeyData = Buffer.from(keyPair.privateKey).toString("base64");
+    const app = await addApplication(apiToken, repository_url, team_id, {
+      data: sshKeyData,
+      passphrase: null,
+    });
+
+    const lines: string[] = [`Application added: ${app.appName} (${app.id})`, ""];
+
+    const githubRepo = parseGitHubRepo(repository_url);
+    if (githubRepo) {
+      const result = await addGitHubDeployKey(githubRepo.owner, githubRepo.repo, keyPair.publicKey);
+      lines.push(result.message);
+      if (!result.added) {
+        lines.push("", "Once the deploy key is in place, Codemagic can clone the repository during builds.");
+      }
+    } else {
+      lines.push(manualGenericInstructions(keyPair.publicKey));
+      lines.push("", "Once the deploy key is in place, Codemagic can clone the repository during builds.");
+    }
+
     return {
-      content: [{ type: "text", text: `Application added: ${app.appName} (${app.id})` }],
+      content: [{ type: "text", text: lines.join("\n") }],
     };
   });
 
