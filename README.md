@@ -74,6 +74,29 @@ npx @modelcontextprotocol/inspector node dist/index.js
 
 Add to your `claude_desktop_config.json`:
 
+**If installed from npm**
+
+```json
+{
+  "mcpServers": {
+    "codemagic": {
+      "command": "npx",
+      "args": ["-y", "codemagic-mcp"],
+      "env": {
+        "CODEMAGIC_API_TOKEN": "your-token",
+        "ASC_KEY_ID": "your-key-id",
+        "ASC_ISSUER_ID": "your-issuer-id",
+        "ASC_PRIVATE_KEY_B64": "base64-encoded-p8-key",
+        "ASC_BYPASS_KEYCHAIN": "1",
+        "GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS": "@file:/path/to/service-account.json"
+      }
+    }
+  }
+}
+```
+
+**If running from a local clone (development):**
+
 ```json
 {
   "mcpServers": {

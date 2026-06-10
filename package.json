@@ -20,6 +20,7 @@
     "url": "git+https://github.com/todah-zg/codemagic-mcp.git"
   },
   "engines": { "node": ">=20" },
+  "bin": { "codemagic-mcp": "./dist/index.js" },
   "type": "module",
   "scripts": {
     "build": "tsc",
