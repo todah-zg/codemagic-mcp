@@ -185,6 +185,16 @@ export async function getReleaseStatus(appId: string): Promise<AscReleaseStatus>
 }
 
 /**
+ * Run a preflight readiness check for an App Store version.
+ * Returns an ordered remediation plan — the first item is the next thing to fix.
+ * @param appId - The App Store Connect app ID.
+ * @param version - App Store version string e.g. "1.2.3".
+ */
+export async function validateAppSubmission(appId: string, version: string): Promise<unknown> {
+  return runAsc<unknown>(["validate", "--app", appId, "--version", version]);
+}
+
+/**
  * Download an IPA from a URL and upload it to TestFlight.
  * The IPA is saved to a temp file, uploaded via the asc CLI, then deleted.
  * @param appId - The App Store Connect app ID.
@@ -254,4 +264,146 @@ export async function publishToAppStore(
   } finally {
     await unlink(tempPath).catch(() => {});
   }
+}
+
+/** Resolve a version string (e.g. "1.2.3") to its App Store version ID. */
+async function getAppStoreVersionId(appId: string, version: string): Promise<string> {
+  const result = await runAsc<{ data: Array<{ id: string }> }>(
+    ["versions", "list", "--app", appId, "--version", version]
+  );
+  if (!result.data.length) throw new Error(`No App Store version found for ${version}`);
+  return result.data[0].id;
+}
+
+export interface VersionMetadataFields {
+  whatsNew?: string;
+  description?: string;
+  keywords?: string;
+  promotionalText?: string;
+  supportUrl?: string;
+  marketingUrl?: string;
+}
+
+/**
+ * Update App Store version localization metadata (What's New, description, keywords, etc.).
+ * @param appId - The App Store Connect app ID.
+ * @param version - Version string e.g. "1.2.3" — resolved to a version ID internally.
+ * @param locale - BCP-47 locale e.g. "en-US", "de-DE", "zh-Hans".
+ * @param fields - One or more fields to update.
+ */
+export async function setVersionMetadata(
+  appId: string,
+  version: string,
+  locale: string,
+  fields: VersionMetadataFields,
+): Promise<unknown> {
+  const versionId = await getAppStoreVersionId(appId, version);
+  const args = ["localizations", "update", "--version", versionId, "--locale", locale];
+  if (fields.whatsNew) args.push("--whats-new", fields.whatsNew);
+  if (fields.description) args.push("--description", fields.description);
+  if (fields.keywords) args.push("--keywords", fields.keywords);
+  if (fields.promotionalText) args.push("--promotional-text", fields.promotionalText);
+  if (fields.supportUrl) args.push("--support-url", fields.supportUrl);
+  if (fields.marketingUrl) args.push("--marketing-url", fields.marketingUrl);
+  return runAsc<unknown>(args);
+}
+
+/**
+ * Set export compliance on a build.
+ * Most apps only use standard HTTPS/TLS — set usesNonExemptEncryption=false.
+ * Only set true if the app implements custom/proprietary encryption beyond standard protocols.
+ * @param appId - The App Store Connect app ID.
+ * @param usesNonExemptEncryption - false for HTTPS/TLS-only apps (most common); true for custom encryption.
+ * @param buildId - Specific build ID to update. Defaults to the latest build for the app.
+ */
+export async function setExportCompliance(
+  appId: string,
+  usesNonExemptEncryption: boolean,
+  buildId?: string,
+): Promise<unknown> {
+  const args = ["builds", "update"];
+  if (buildId) {
+    args.push("--build-id", buildId);
+  } else {
+    args.push("--app", appId, "--latest");
+  }
+  args.push(`--uses-non-exempt-encryption=${String(usesNonExemptEncryption)}`);
+  return runAsc<unknown>(args);
+}
+
+/**
+ * Release an App Store version that is in the "Pending Developer Release" state.
+ * This makes the update publicly available immediately.
+ * @param appId - The App Store Connect app ID.
+ * @param version - Version string e.g. "1.2.3".
+ */
+export async function releaseVersion(appId: string, version: string): Promise<unknown> {
+  const versionId = await getAppStoreVersionId(appId, version);
+  return runAsc<unknown>(["versions", "release", "--version-id", versionId, "--confirm"]);
+}
+
+/**
+ * Manage a phased rollout for an App Store version.
+ * @param appId - The App Store Connect app ID.
+ * @param version - Version string e.g. "1.2.3".
+ * @param action - "create": set up phased rollout before submission.
+ *                 "pause": pause an in-progress rollout.
+ *                 "resume": resume a paused rollout.
+ *                 "complete": release to all users immediately.
+ */
+export async function setPhasedRelease(
+  appId: string,
+  version: string,
+  action: "create" | "pause" | "resume" | "complete",
+): Promise<unknown> {
+  const versionId = await getAppStoreVersionId(appId, version);
+  if (action === "create") {
+    return runAsc<unknown>(["versions", "phased-release", "create", "--version-id", versionId]);
+  }
+  const phasedRelease = await runAsc<{ id: string }>(
+    ["versions", "phased-release", "view", "--version-id", versionId]
+  );
+  const state = action === "pause" ? "PAUSED" : action === "resume" ? "ACTIVE" : "COMPLETE";
+  return runAsc<unknown>(["versions", "phased-release", "update", "--id", phasedRelease.id, "--state", state]);
+}
+
+/**
+ * Submit a build for TestFlight beta app review.
+ * Required before external beta groups can access the build.
+ * @param buildId - The App Store Connect build ID (from list_asc_builds).
+ */
+export async function submitBetaReview(buildId: string): Promise<unknown> {
+  return runAsc<unknown>(["testflight", "review", "submit", "--build-id", buildId, "--confirm"]);
+}
+
+/**
+ * Add a tester to TestFlight by email, optionally to a specific group.
+ * @param appId - The App Store Connect app ID.
+ * @param email - Tester email address.
+ * @param group - Group name or ID to add the tester to (optional).
+ */
+export async function addTestFlightTester(
+  appId: string,
+  email: string,
+  group?: string,
+): Promise<unknown> {
+  const args = ["testflight", "testers", "add", "--app", appId, "--email", email];
+  if (group) args.push("--group", group);
+  return runAsc<unknown>(args);
+}
+
+/**
+ * Create a new TestFlight beta group for an app.
+ * @param appId - The App Store Connect app ID.
+ * @param name - Display name for the group.
+ * @param internal - If true, creates an internal group (Apple employees/org members only).
+ */
+export async function createTestFlightGroup(
+  appId: string,
+  name: string,
+  internal = false,
+): Promise<unknown> {
+  const args = ["testflight", "groups", "create", "--app", appId, "--name", name];
+  if (internal) args.push("--internal");
+  return runAsc<unknown>(args);
 }

@@ -28,7 +28,7 @@ or guide a first-time publisher through the parts that genuinely require a human
 *The biggest gap: an agent can deliver a build to TestFlight but cannot release
 anything to either store. This phase closes the loop end-to-end.*
 
-### iOS (wrapping more of the asc CLI we already require)
+### iOS (wrapping more of the asc CLI we already require) (complete)
 
 The asc CLI turns out to cover nearly the entire ASC API surface (verified
 locally via `asc capabilities`). New tools, in priority order:

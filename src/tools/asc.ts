@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, publishToAppStore } from "../asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, publishToAppStore, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup } from "../asc.js";
 
 export function registerAscTools(server: McpServer): void {
 
@@ -86,6 +86,198 @@ export function registerAscTools(server: McpServer): void {
     }
     return {
       content: [{ type: "text", text: lines.join("\n") }],
+    };
+  });
+
+  server.registerTool("validate_app_submission", {
+    description:
+      "Run a preflight readiness check for an App Store version before submitting for review. " +
+      "Checks metadata completeness, build attachment, export compliance, pricing, screenshots, and more. " +
+      "Returns an ordered remediation plan — fix the first item, then call again to confirm it is resolved. " +
+      "Call this before publish_to_app_store with submit_for_review=true.",
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+    },
+  }, async ({ app_id, version }) => {
+    const result = await validateAppSubmission(app_id, version);
+    return {
+      content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+    };
+  });
+
+  server.registerTool("set_version_metadata", {
+    description:
+      "Update App Store version localization metadata — What's New text, description, keywords, and more. " +
+      "What's New is required for every release before submitting for review. " +
+      "Call once per locale — en-US is the required default; add other locales if the app supports them. " +
+      "Use validate_app_submission afterward to confirm the update resolved the blocker.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+      locale: z.string().default("en-US").describe("BCP-47 locale e.g. 'en-US', 'de-DE', 'zh-Hans' (default: en-US)"),
+      whats_new: z.string().optional().describe("What's New in this version (required by Apple for every release)"),
+      description: z.string().optional().describe("Full app description"),
+      keywords: z.string().optional().describe("Comma-separated search keywords"),
+      promotional_text: z.string().optional().describe("Promotional text shown above the description"),
+      support_url: z.string().optional().describe("Support URL"),
+      marketing_url: z.string().optional().describe("Marketing URL"),
+    },
+  }, async ({ app_id, version, locale, whats_new, description, keywords, promotional_text, support_url, marketing_url }) => {
+    const result = await setVersionMetadata(app_id, version, locale, {
+      whatsNew: whats_new,
+      description,
+      keywords,
+      promotionalText: promotional_text,
+      supportUrl: support_url,
+      marketingUrl: marketing_url,
+    });
+    return {
+      content: [{ type: "text", text: `Metadata updated for ${version} (${locale}).\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+  server.registerTool("set_export_compliance", {
+    description:
+      "Set the export compliance declaration for an iOS build. " +
+      "Required before App Store submission and for TestFlight external distribution. " +
+      "Most apps only use standard HTTPS/TLS — set uses_non_exempt_encryption to false. " +
+      "Only set it to true if the app implements custom or proprietary encryption beyond standard protocols. " +
+      "Defaults to the latest build for the app; pass build_id to target a specific build.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      uses_non_exempt_encryption: z.boolean().describe("Set to false for apps that only use HTTPS/TLS (most apps). Set to true only for apps with custom proprietary encryption."),
+      build_id: z.string().optional().describe("Specific build ID to update — defaults to the latest build"),
+    },
+  }, async ({ app_id, uses_non_exempt_encryption, build_id }) => {
+    const result = await setExportCompliance(app_id, uses_non_exempt_encryption, build_id);
+    return {
+      content: [{
+        type: "text",
+        text: `Export compliance set: uses_non_exempt_encryption=${uses_non_exempt_encryption}.\n${JSON.stringify(result, null, 2)}`,
+      }],
+    };
+  });
+
+  server.registerTool("release_version", {
+    description:
+      "Release an App Store version that has been approved and is waiting in 'Pending Developer Release' state. " +
+      "This immediately makes the update available to all users (or starts the phased rollout if one was configured). " +
+      "Use set_phased_release with action=create before submission if you want a gradual rollout instead of an instant release.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+    },
+  }, async ({ app_id, version }) => {
+    const result = await releaseVersion(app_id, version);
+    return {
+      content: [{ type: "text", text: `Version ${version} released.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+  
+  server.registerTool("set_phased_release", {
+    description:
+      "Manage a phased rollout for an App Store version. " +
+      "Phased rollout gradually releases the update over 7 days: 1% → 2% → 5% → 10% → 20% → 50% → 100%. " +
+      "Actions: 'create' — configure phased rollout before submitting for review. " +
+      "'pause' — pause an in-progress rollout (use if a critical bug is found after release). " +
+      "'resume' — resume a paused rollout. " +
+      "'complete' — immediately release to all remaining users.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+      action: z.enum(["create", "pause", "resume", "complete"]).describe(
+        "create: set up phased rollout before submission | pause: halt rollout | resume: continue after pause | complete: release to all users now"
+      ),
+    },
+  }, async ({ app_id, version, action }) => {
+    const result = await setPhasedRelease(app_id, version, action);
+    const messages: Record<string, string> = {
+      create: `Phased rollout configured for version ${version}. It will start automatically after the version is approved and released.`,
+      pause: `Phased rollout paused for version ${version}.`,
+      resume: `Phased rollout resumed for version ${version}.`,
+      complete: `Phased rollout completed — version ${version} is now available to all users.`,
+    };
+    return {
+      content: [{ type: "text", text: `${messages[action]}\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+  server.registerTool("submit_beta_review", {
+    description:
+      "Submit a build for TestFlight beta app review. " +
+      "Required before external beta groups can install the build — Apple reviews it once, then all external groups can access it. " +
+      "Internal groups (Apple employees / org members) do not require beta review. " +
+      "Get the build ID from list_asc_builds.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      build_id: z.string().describe("The App Store Connect build ID (from list_asc_builds)"),
+    },
+  }, async ({ build_id }) => {
+    const result = await submitBetaReview(build_id);
+    return {
+      content: [{ type: "text", text: `Build submitted for beta review.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+  
+  server.registerTool("add_testflight_tester", {
+    description:
+      "Add a tester to TestFlight by email address. " +
+      "Optionally assign them to a specific beta group — use list_testflight_groups to get group names. " +
+      "The tester receives an invitation email from Apple.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      email: z.string().describe("Tester email address"),
+      group: z.string().optional().describe("Beta group name or ID to add the tester to (from list_testflight_groups)"),
+    },
+  }, async ({ app_id, email, group }) => {
+    const result = await addTestFlightTester(app_id, email, group);
+    return {
+      content: [{ type: "text", text: `Tester ${email} added.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+  
+  server.registerTool("create_testflight_group", {
+    description:
+      "Create a new TestFlight beta group for an app. " +
+      "External groups require beta app review before testers can install builds. " +
+      "Internal groups (Apple org members) do not require review — useful for fast internal QA.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      name: z.string().describe("Display name for the group e.g. 'External Beta Testers'"),
+      internal: z.boolean().optional().describe("Create an internal group (Apple org members only, no beta review required). Default: false (external group)."),
+    },
+  }, async ({ app_id, name, internal }) => {
+    const result = await createTestFlightGroup(app_id, name, internal ?? false);
+    return {
+      content: [{ type: "text", text: `Group '${name}' created.\n${JSON.stringify(result, null, 2)}` }],
     };
   });
 
