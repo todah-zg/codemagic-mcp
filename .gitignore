@@ -4,3 +4,4 @@ dist/
 .env
 .env.*
 docs/HOSTING.md
+codemagic-openapi.json

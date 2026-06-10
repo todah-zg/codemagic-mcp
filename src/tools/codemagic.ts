@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -23,6 +23,18 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     return {
       content: [{ type: "text", text }],
     };
+  });
+
+  server.registerTool("list_teams", {
+    description: "List teams the authenticated Codemagic account belongs to. Use the team IDs returned here with list_applications, list_builds, and other tools that accept an optional team_id.",
+    inputSchema: {},
+  }, async () => {
+    const teams = await listTeams(apiToken);
+    if (!teams.length) return {
+      content: [{ type: "text", text: "No teams found. The token belongs to a personal account only." }],
+    };
+    const text = teams.map(t => `${t.name} — ID: ${t.id}`).join("\n");
+    return { content: [{ type: "text", text }] };
   });
 
   server.registerTool("list_workflows", {

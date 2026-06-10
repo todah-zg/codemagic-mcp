@@ -35,6 +35,26 @@ export async function listApplications(apiToken: string, teamId?: string): Promi
   return data.data;
 }
 
+export interface Team {
+  id: string;
+  name: string;
+}
+
+/**
+ * List teams the authenticated user belongs to.
+ * Use the returned team IDs with list_applications, list_builds, and other team-scoped tools.
+ * @param apiToken - Codemagic API token.
+ */
+export async function listTeams(apiToken: string): Promise<Team[]> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/user/teams`, {
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  const data = await response.json() as { data: Array<{ id: string; name: string }> };
+  return data.data.map(t => ({ id: t.id, name: t.name }));
+}
+
 export interface Artifact {
   name: string;
   type: string;
