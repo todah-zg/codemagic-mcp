@@ -10,16 +10,23 @@ crossing it.
 
 ---
 
-## Where we are (Phase 1 — complete)
+## Where we are (Phase 2 — complete)
 
-27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
+**Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
-27 passing tests. Full loop proven: onboard repo → debug build → release build →
+29 passing tests. Full loop proven: onboard repo → debug build → release build →
 TestFlight / Google Play.
 
-What we can NOT do today: ship to the **App Store** (TestFlight is our iOS
-terminus), manage store listings, promote/stage releases, generate store assets,
-or guide a first-time publisher through the parts that genuinely require a human.
+**Phase 2:** Complete publishing loop on both platforms. iOS adds: `publish_to_app_store`,
+`validate_app_submission`, `set_version_metadata`, `set_export_compliance`,
+`release_version`, `set_phased_release`, `submit_beta_review`, `add_testflight_tester`,
+`create_testflight_group`. Android adds: `promote_google_play_release`,
+`set_rollout_fraction`, `share_app_internally`, `get_latest_build_number`.
+Both `/ios_release` and `/android_release` prompts updated end-to-end.
+
+What we can NOT do today: manage store **listings** (descriptions, screenshots, metadata),
+generate store assets, or guide a first-time publisher through the parts that genuinely
+require a human (app record creation, privacy labels, compliance forms).
 
 ---
 
@@ -28,7 +35,7 @@ or guide a first-time publisher through the parts that genuinely require a human
 *The biggest gap: an agent can deliver a build to TestFlight but cannot release
 anything to either store. This phase closes the loop end-to-end.*
 
-### iOS (wrapping more of the asc CLI we already require) (complete)
+### iOS (wrapping more of the asc CLI we already require)
 
 The asc CLI turns out to cover nearly the entire ASC API surface (verified
 locally via `asc capabilities`). New tools, in priority order:
