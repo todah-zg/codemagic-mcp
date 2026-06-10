@@ -69,6 +69,19 @@ locally via `asc capabilities`). New tools, in priority order:
 **Deliverable:** prompts updated so `/ios_release` ends at the App Store (not
 TestFlight) and `/android_release` includes promote + staged rollout guidance.
 
+### Codemagic API completeness
+
+Gaps identified via competitive analysis (June 2026):
+
+| Tool | Priority | Notes |
+|---|---|---|
+| `cancel_build` | High — in this release | If an agent triggers the wrong build, it has no way to stop it. One POST call. |
+| `get_user` / `list_teams` | High | The agent can't discover which teams the token belongs to — `list_builds` requires a `team_id` that must be known in advance. `list_teams` solves the discovery problem. |
+| Instance type on `trigger_build` | Medium | Templates hardcode the machine type; the agent can't override it without editing the full YAML. An `instance_type` parameter would allow a one-line override at trigger time. |
+| `update_variable` / `delete_variable` | Low | CRUD completeness for variable management |
+| `list_caches` / `delete_caches` | Low | Useful when debugging slow builds or storage exhaustion |
+| `create_public_artifact_url` | Low | Share IPA/AAB links externally without requiring Codemagic auth |
+
 ### Rethinking build status polling
 
 The current `wait_for_build` design has a fundamental impedance mismatch: MCP clients timeout in ~60 seconds, but a Codemagic build machine takes 45–60 seconds just to spin up. With a 30-second polling interval, the tool gets at most one status check before hitting the timeout — and that check almost always returns "still building" because the machine hasn't even started executing yet.
