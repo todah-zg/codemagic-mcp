@@ -5,6 +5,12 @@ export interface DetectionResult {
   suggestedDebugTemplate: string | null;
 }
 
+const SECONDARY_DIRS = new Set([
+  "example", "examples", "test", "tests", "testdata", "__tests__",
+  "fixture", "fixtures", "__fixtures__", "playground", "benchmark",
+  "benchmarks", "demo", "demos", "sample", "samples", "mock", "mocks",
+]);
+
 /**
  * Detect the Codemagic project type from a list of repository file paths.
  * Paths should be relative to the repository root. Include at least two
@@ -20,9 +26,10 @@ export function detectProjectType(
 ): DetectionResult {
   // Normalise: lowercase and forward slashes for consistent matching
   const files = filePaths.map(f => f.toLowerCase().replace(/\\/g, "/"));
+  const primaryFiles = files.filter(f => !f.split("/").some(seg => SECONDARY_DIRS.has(seg)));
 
-  const hasPath = (substr: string) => files.some(f => f.includes(substr));
-  const hasFile = (name: string) => files.some(f => f === name || f.endsWith("/" + name));
+  const hasPath = (substr: string) => primaryFiles.some(f => f.includes(substr));
+  const hasFile = (name: string) => primaryFiles.some(f => f === name || f.endsWith("/" + name));
 
   // ── Snap ──────────────────────────────────────────────────────────────────
   if (hasFile("snapcraft.yaml") || hasFile("snapcraft.yml")) {

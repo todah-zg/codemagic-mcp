@@ -104,4 +104,24 @@ describe("detectProjectType", () => {
     expect(result.suggestedDebugTemplate).toBeNull();
   });
 
+  it("ignores pubspec.yaml inside example/ subdirectory", () => {
+    const result = detectProjectType([
+      "package.json", "metro.config.js", "android/", "ios/",
+      "example/pubspec.yaml", "example/lib/main.dart",
+    ]);
+    expect(result.projectType).toBe("react-native");
+    expect(result.confidence).toBe("high");
+  });
+
+  it("ignores gradle files inside test/fixtures/ subdirectory", () => {
+    const result = detectProjectType([
+      "MyApp.xcodeproj/project.pbxproj",
+      "test/fixtures/android-project/build.gradle",
+    ]);
+    expect(result.projectType).toBe("ios");
+    expect(result.confidence).toBe("high");
+  });
+
+
+
 });
