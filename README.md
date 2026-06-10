@@ -55,9 +55,40 @@ GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS=@file:/path/to/service-account.json
 
 ## Installation
 
+### Using npx (recommended)
+
+No installation needed. Add the server to your MCP client config with `npx` and it downloads and runs automatically:
+
+```json
+"command": "npx",
+"args": ["-y", "codemagic-mcp-server"]
 ```
+
+See the Claude Desktop section below for the full config.
+
+### Global install
+If you prefer a permanent install instead of npx:
+
+```bash
+npm install -g codemagic-mcp-server
+```
+
+Then use codemagic-mcp as the command in your MCP client config:
+
+```json
+"command": "codemagic-mcp",
+"args": []
+```
+
+### Development
+To build from source:
+
+```bash
+git clone https://github.com/todah-zg/codemagic-mcp.git
+cd codemagic-mcp
 npm install
 npm run build
+Then use the local path in your MCP config — see Running from a local clone below.
 ```
 
 ## Running
