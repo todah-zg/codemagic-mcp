@@ -170,6 +170,7 @@ You can also describe what you want in plain language — Claude will select the
 | `get_build` | Get full details for a single build including artifacts |
 | `trigger_build` | Trigger a build; optionally supply an inline `codemagic.yaml` |
 | `wait_for_build` | Poll until a build reaches a terminal state; returns artifacts |
+| `cancel_build` | Cancel a running or queued build |
 | `add_application` | Connect a Git repository to Codemagic |
 | `get_webhook_url` | Get the incoming webhook URL to paste into your Git provider settings |
 | `list_webhooks` | List webhook subscriptions configured for an app |

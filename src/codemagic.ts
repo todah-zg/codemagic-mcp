@@ -162,6 +162,22 @@ export interface Workflow {
 }
 
 /**
+ * Cancel a running or queued build.
+ * Has no effect on builds that have already reached a terminal state.
+ * @param apiToken - Codemagic API token.
+ * @param buildId - The build ID to cancel.
+ */
+export async function cancelBuild(apiToken: string, buildId: string): Promise<void> {
+  const response = await fetch(`${BASE_URL_V1}/builds/${buildId}/cancel`, {
+    method: "POST",
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+}
+
+
+/**
  * List workflows defined for an application.
  * Note: workflows defined in codemagic.yaml only appear here after their first build has run.
  * @param apiToken - Codemagic API token.

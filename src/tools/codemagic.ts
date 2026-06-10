@@ -1,7 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listBuilds, getBuild, triggerBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
-
+import { listApplications, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
   server.registerTool("ping", {
@@ -136,6 +135,22 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     return {
       content: [{ type: "text", text }],
       isError: build.status !== "finished",
+    };
+  });
+
+  server.registerTool("cancel_build", {
+    description: "Cancel a running or queued Codemagic build. Use when a triggered build is no longer needed — for example if the wrong branch was used or an error was found after triggering. Has no effect on builds that have already finished.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+    },
+    inputSchema: {
+      build_id: z.string().describe("The Codemagic build ID to cancel (from trigger_build or list_builds)"),
+    },
+  }, async ({ build_id }) => {
+    await cancelBuild(apiToken, build_id);
+    return {
+      content: [{ type: "text", text: `Build ${build_id} cancelled.` }],
     };
   });
 
