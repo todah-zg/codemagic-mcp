@@ -122,3 +122,86 @@ export async function uploadToGooglePlay(
     await unlink(tempPath).catch(() => { });
   }
 }
+
+/**
+ * Promote a release between Google Play tracks.
+ * To halt a staged rollout: set sourceTrack=targetTrack="production" and releaseStatus="halted".
+ * To resume: set releaseStatus="inProgress" with a userFraction.
+ * @param packageName - Android package name e.g. com.example.myapp.
+ * @param sourceTrack - Source track: internal, alpha, beta, production.
+ * @param targetTrack - Target track: alpha, beta, production.
+ * @param userFraction - Staged rollout fraction 0.0–1.0 (omit for full rollout).
+ * @param releaseStatus - Override release status: completed, inProgress, halted, draft.
+ */
+export async function promoteRelease(
+  packageName: string,
+  sourceTrack: string,
+  targetTrack: string,
+  userFraction?: number,
+  releaseStatus?: string,
+): Promise<unknown> {
+  const args = [
+    "tracks", "promote-release",
+    "--package-name", packageName,
+    "--source-track", sourceTrack,
+    "--target-track", targetTrack,
+  ];
+  if (userFraction !== undefined) args.push("--user-fraction", String(userFraction));
+  if (releaseStatus) args.push("--release-status", releaseStatus);
+  return runGooglePlay<unknown>(args);
+}
+
+/**
+ * Adjust the staged rollout fraction for an existing release on a track.
+ * @param packageName - Android package name.
+ * @param track - Target track e.g. production.
+ * @param versionCode - Version code of the release to update.
+ * @param rolloutFraction - New fraction 0.0–1.0 (e.g. 0.1 = 10%).
+ */
+export async function setRolloutFraction(
+  packageName: string,
+  track: string,
+  versionCode: number,
+  rolloutFraction: number,
+): Promise<unknown> {
+  return runGooglePlay<unknown>([
+    "tracks", "set-release",
+    "--package-name", packageName,
+    "--track", track,
+    "--version-code", String(versionCode),
+    "--rollout-fraction", String(rolloutFraction),
+  ]);
+}
+
+/**
+ * Download an AAB from a URL and upload it as an internal app sharing link.
+ * Returns a shareable download URL — no track or review required.
+ * @param aabUrl - Direct download URL for the AAB (e.g. a Codemagic artifact URL).
+ */
+export async function shareAppInternally(aabUrl: string): Promise<unknown> {
+  const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
+  const response = await fetch(aabUrl);
+  if (!response.ok) throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
+  if (!response.body) throw new Error("AAB response body is empty");
+  await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
+  try {
+    return await runGooglePlay<unknown>(["internal-app-sharing", "upload-bundle", "--bundle", tempPath]);
+  } finally {
+    await unlink(tempPath).catch(() => {});
+  }
+}
+
+/**
+ * Get the highest versionCode across all (or specified) Google Play tracks.
+ * Use this to determine the next build number before triggering a release build.
+ * @param packageName - Android package name.
+ * @param tracks - Optional comma-separated track names to check. Defaults to all tracks.
+ */
+export async function getLatestBuildNumber(
+  packageName: string,
+  tracks?: string,
+): Promise<unknown> {
+  const args = ["get-latest-build-number", "--package-name", packageName];
+  if (tracks) args.push("--tracks", tracks);
+  return runGooglePlay<unknown>(args);
+}

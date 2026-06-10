@@ -43,7 +43,7 @@ locally via `asc capabilities`). New tools, in priority order:
 | `add_testflight_tester` / `create_testflight_group` | `asc testflight testers/groups` | Real gap: cli-tools has no tester-by-email management |
 | `submit_beta_review` | `asc review submit` (beta) | Required before any external TestFlight distribution |
 
-### Android (google-play CLI + direct androidpublisher calls)
+### Android (google-play CLI + direct androidpublisher calls) (complete)
 
 | Tool | Wraps | Why |
 |---|---|---|

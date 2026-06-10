@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listTracks, listBundles, uploadToGooglePlay } from "../googleplay.js";
+import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
 
 export function registerGooglePlayTools(server: McpServer): void {
 
@@ -56,5 +56,88 @@ export function registerGooglePlayTools(server: McpServer): void {
       content: [{ type: "text", text: `Published to Google Play (${track} track).\n${result}` }],
     };
   });
+
+  server.registerTool("promote_google_play_release", {
+    description:
+      "Promote a release between Google Play tracks (e.g. internal → alpha → beta → production) without re-uploading. " +
+      "Set user_fraction to enable staged rollout on the target track (0.1 = 10% of users). " +
+      "To halt an in-progress staged rollout: set source_track=target_track='production' and release_status='halted'. " +
+      "To resume a halted rollout: same tracks with release_status='inProgress' and a user_fraction.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      source_track: z.enum(["internal", "alpha", "beta", "production"]).describe("Track to promote from"),
+      target_track: z.enum(["alpha", "beta", "production"]).describe("Track to promote to"),
+      user_fraction: z.number().min(0).max(1).optional().describe("Staged rollout fraction 0.0–1.0 (e.g. 0.1 = 10%). Omit for full rollout."),
+      release_status: z.enum(["completed", "inProgress", "halted", "draft"]).optional().describe("Override release status. Default: completed (full rollout) or inProgress (staged)."),
+    },
+  }, async ({ package_name, source_track, target_track, user_fraction, release_status }) => {
+    const result = await promoteRelease(package_name, source_track, target_track, user_fraction, release_status);
+    return {
+      content: [{ type: "text", text: `Release promoted from ${source_track} to ${target_track}.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+  server.registerTool("set_rollout_fraction", {
+    description:
+      "Adjust the staged rollout percentage for an existing release on a Google Play track. " +
+      "Use this to gradually expand a rollout (e.g. 10% → 25% → 50% → 100%). " +
+      "Requires the version code of the release currently in the staged rollout.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name"),
+      track: z.enum(["alpha", "beta", "production"]).describe("The track with the staged rollout"),
+      version_code: z.number().int().describe("Version code of the release to update (from list_google_play_tracks)"),
+      rollout_fraction: z.number().min(0).max(1).describe("New rollout fraction 0.0–1.0 (e.g. 0.5 = 50%)"),
+    },
+  }, async ({ package_name, track, version_code, rollout_fraction }) => {
+    const result = await setRolloutFraction(package_name, track, version_code, rollout_fraction);
+    return {
+      content: [{ type: "text", text: `Rollout fraction set to ${rollout_fraction * 100}% on ${track} track.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+  server.registerTool("share_app_internally", {
+    description:
+      "Upload an AAB from Codemagic as a Google Play internal app sharing link. " +
+      "Returns an install URL that can be shared with testers instantly — no track, no review, no version code ceremony. " +
+      "Testers need the internal app sharing feature enabled on their device. " +
+      "Ideal for quick QA before promoting to a track.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      aab_url: z.string().describe("The AAB download URL from a Codemagic build artifact"),
+    },
+  }, async ({ aab_url }) => {
+    const result = await shareAppInternally(aab_url);
+    return {
+      content: [{ type: "text", text: `Internal sharing link created.\n${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+  server.registerTool("get_latest_build_number", {
+    description:
+      "Get the highest versionCode currently on Google Play across all tracks (or specific tracks). " +
+      "Use this before triggering a release build to determine the next BUILD_NUMBER — increment the result by 1.",
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      tracks: z.string().optional().describe("Comma-separated track names to check e.g. 'production,beta'. Defaults to all tracks."),
+    },
+  }, async ({ package_name, tracks }) => {
+    const result = await getLatestBuildNumber(package_name, tracks);
+    return {
+      content: [{ type: "text", text: `Latest build number: ${JSON.stringify(result, null, 2)}` }],
+    };
+  });
+
+
 
 }
