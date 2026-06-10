@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -318,5 +318,47 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     await deleteWebhook(apiToken, app_id, webhook_id);
     return { content: [{ type: "text", text: `Webhook ${webhook_id} deleted.` }] };
   });
+
+  server.registerTool("get_build_logs", {
+    description: "Fetch logs for a Codemagic build. By default returns logs for failed steps only — the primary use case is diagnosing why a build failed. Pass step_name to fetch logs for a specific step regardless of status (e.g. 'building_ios', 'testing', 'publishing'). Always returns the step list with statuses first.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      build_id: z.string().describe("The Codemagic build ID"),
+      step_name: z.string().optional().describe("Fetch logs for this specific step name only. If omitted, logs are fetched for failed steps (or none if the build succeeded)."),
+    },
+  }, async ({ build_id, step_name }) => {
+    const actions = await getBuildActions(apiToken, build_id);
+  
+    const stepList = actions.map(a =>
+      `  [${a.status ?? "pending"}] ${a.name} (${a.type})`
+    ).join("\n");
+  
+    const toFetch = step_name
+      ? actions.filter(a => a.name === step_name || a.type === step_name)
+      : actions.filter(a => a.status === "failed");
+  
+    if (toFetch.length === 0) {
+      return {
+        content: [{ type: "text", text: `Steps:\n${stepList}\n\nNo logs to fetch.` }],
+      };
+    }
+  
+    const MAX_LOG_CHARS = 20_000;
+    const logSections = await Promise.all(
+      toFetch.map(async (a) => {
+        const raw = await getStepLog(apiToken, build_id, a.id);
+        const truncated = raw.length > MAX_LOG_CHARS
+          ? raw.slice(-MAX_LOG_CHARS) + `\n[truncated — showing last ${MAX_LOG_CHARS} chars of ${raw.length}]`
+          : raw;
+        return `=== ${a.name} (${a.status ?? "pending"}) ===\n${truncated}`;
+      })
+    );
+  
+    return {
+      content: [{ type: "text", text: `Steps:\n${stepList}\n\n${logSections.join("\n\n")}` }],
+    };
+  });
+
+
 
 }

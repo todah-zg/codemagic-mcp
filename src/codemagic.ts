@@ -439,3 +439,44 @@ export async function deleteWebhook(apiToken: string, appId: string, webhookId: 
   });
   if (!response.ok) throw await buildApiError(response);
 }
+
+export interface BuildAction {
+  id: string;
+  name: string;
+  type: string;
+  status: string | null;
+}
+
+/**
+ * List all build steps (actions) for a build, including their status and timing.
+ * The returned IDs are used with getStepLog to fetch log text for individual steps.
+ * Uses the v3 API — no log content is returned here, only metadata.
+ * @param apiToken - Codemagic API token.
+ * @param buildId - The build ID.
+ */
+export async function getBuildActions(apiToken: string, buildId: string): Promise<BuildAction[]> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}/actions`, {
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  const data = await response.json() as { data: BuildAction[] };
+  return data.data;
+}
+
+/**
+ * Fetch the plain-text log for a single build step.
+ * Uses the v1 API (api.codemagic.io) — this endpoint is not in the v3 OpenAPI schema
+ * but accepts the same x-auth-token authentication.
+ * @param apiToken - Codemagic API token.
+ * @param buildId - The build ID.
+ * @param stepId - The step ID from getBuildActions.
+ */
+export async function getStepLog(apiToken: string, buildId: string, stepId: string): Promise<string> {
+  const response = await fetch(`${BASE_URL_V1}/builds/${buildId}/step/${stepId}`, {
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  return response.text();
+}
