@@ -7,6 +7,7 @@ import { registerAscTools } from "./tools/asc.js";
 import { registerGooglePlayTools } from "./tools/googleplay.js";
 import { registerYamlTools } from "./tools/yaml.js";
 import { registerPrompts } from "./prompts.js";
+import { registerReleaseNotesTools } from "./tools/releasenotes.js";
 
 // Validate required credentials
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -42,6 +43,9 @@ registerAscTools(server);
 registerGooglePlayTools(server);
 registerYamlTools(server);
 registerPrompts(server);
+registerReleaseNotesTools(server);
+
+
 // Start
 const transport = new StdioServerTransport();
 await server.connect(transport);
