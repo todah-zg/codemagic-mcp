@@ -9,6 +9,7 @@ import { registerYamlTools } from "./tools/yaml.js";
 import { registerPrompts } from "./prompts.js";
 import { registerReleaseNotesTools } from "./tools/releasenotes.js";
 import { registerReadinessTools } from "./tools/readiness.js";
+import { registerTestingTools } from "./tools/testing.js";
 
 // Validate required credentials
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -46,6 +47,7 @@ registerYamlTools(server);
 registerPrompts(server);
 registerReleaseNotesTools(server);
 registerReadinessTools(server);
+registerTestingTools(server, apiToken);
 
 
 // Start
