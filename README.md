@@ -4,11 +4,12 @@ An MCP (Model Context Protocol) server that gives AI agents a unified surface ov
 
 ## What it does
 
-The server exposes tools across four domains:
+The server exposes tools across five domains:
 
 - **Codemagic** — list teams and apps, trigger builds, wait for results, retrieve artifacts, fetch build logs, manage variable groups, caches, and webhooks
 - **App Store Connect** — manage TestFlight, upload and submit builds, set listing text and screenshots, validate, submit, and release to the App Store
-- **Google Play** — publish AABs, promote releases, manage staged rollouts, set listing text and screenshots
+- **Google Play** — publish AABs, promote releases, manage staged rollouts, set listing text and screenshots, read and reply to user reviews
+- **Testing** — parse JUnit XML test results from any Codemagic build; get a pass/fail/error/skip summary with per-failure details
 - **Cross-store** — validate localized release notes against platform char limits and BCP-47 locale codes
 
 The intended end-to-end flows are:
@@ -253,6 +254,14 @@ You can also describe what you want in plain language — Claude will select the
 | `set_android_store_listing` | Update Google Play store listing for a language — only provided fields are changed |
 | `upload_android_screenshots` | Download screenshots from URLs and upload to Google Play for a language and device type |
 | `set_android_data_safety` | Submit the data safety declaration CSV (exported from Play Console) — re-upload when data practices change |
+| `list_google_play_reviews` | List recent user reviews with optional star rating filter (e.g. 1–2 stars only); includes developer reply status and review IDs |
+| `reply_to_google_play_review` | Post or update a developer reply to a user review (max 350 characters) |
+
+### Testing
+
+| Tool | Description |
+|------|-------------|
+| `get_test_results` | Fetch and parse JUnit XML test results from a Codemagic build — returns a pass/fail/error/skip summary with per-failure details and stack trace excerpts. Covers Flutter, Android instrumented tests, and iOS (via xcresult conversion). Pass `artifact_url` directly if you already have it from `wait_for_build`. |
 
 ### Cross-store
 
@@ -301,7 +310,8 @@ src/
   codemagic.ts          — Codemagic API functions (v3 + v1)
   asc.ts                — App Store Connect CLI wrapper
   googleplay.ts         — Google Play CLI wrapper
-  androidpublisher.ts   — Google Play androidpublisher REST API client (listings, screenshots)
+  androidpublisher.ts   — Google Play androidpublisher REST API client (listings, screenshots, reviews)
+  testing.ts            — JUnit XML parser (no external dependencies)
   ssh.ts                — SSH key generation and deploy key setup
   yaml.ts               — YAML validation logic
   templates.ts          — Static codemagic.yaml templates
@@ -313,6 +323,8 @@ src/
     googleplay.ts       — Google Play MCP tool registrations
     yaml.ts             — YAML MCP tool registrations
     releasenotes.ts     — Release notes validation tool
+    readiness.ts        — Publish readiness check tool
+    testing.ts          — Test results tool
 ```
 
 The `src/` modules contain pure functions (API calls, CLI wrappers) with no MCP dependency.
