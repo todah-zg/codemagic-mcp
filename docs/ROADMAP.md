@@ -17,14 +17,17 @@ templates, project-type detection, three workflow prompts, webhook management,
 29 passing tests. Full loop proven: onboard repo → debug build → release build →
 TestFlight / Google Play.
 
-**Phase 2:** Complete publishing loop on both platforms, plus build diagnostics and
-release note validation. iOS adds: `publish_to_app_store`, `validate_app_submission`,
-`set_version_metadata`, `set_export_compliance`, `release_version`, `set_phased_release`,
-`submit_beta_review`, `add_testflight_tester`, `create_testflight_group`. Android adds:
+**Phase 2:** Complete publishing loop on both platforms, plus build diagnostics,
+release note validation, and full Codemagic API coverage. iOS adds: `upload_build_to_asc`,
+`submit_for_app_store_review`, `validate_app_submission`, `set_version_metadata`,
+`set_export_compliance`, `release_version`, `set_phased_release`, `submit_beta_review`,
+`add_testflight_tester`, `create_testflight_group`. Android adds:
 `promote_google_play_release`, `set_rollout_fraction`, `share_app_internally`,
-`get_latest_build_number`. Codemagic adds: `list_teams`, `get_build_logs`.
-Cross-store adds: `prepare_release_notes`. Both `/ios_release` and `/android_release`
-prompts updated end-to-end.
+`get_latest_build_number`. Codemagic adds: `list_teams`, `get_build_logs`,
+`list_variables`, `update_variable`, `delete_variable`, `list_caches`, `delete_cache`,
+`create_public_artifact_url`, `instance_type` on `trigger_build`, `wait_for_build`
+redesigned as single-check. Cross-store adds: `prepare_release_notes`. Both
+`/ios_release` and `/android_release` prompts updated end-to-end.
 
 What we can NOT do today: manage store **listings** (descriptions, screenshots, metadata),
 generate store assets, or guide a first-time publisher through the parts that genuinely
@@ -44,7 +47,7 @@ locally via `asc capabilities`). New tools, in priority order:
 
 | Tool | Wraps | Why |
 |---|---|---|
-| `publish_to_app_store` | `asc publish appstore --ipa … --version … --submit` | The canonical upload + submit flow in one command — the single most important missing capability |
+| `upload_build_to_asc` + `submit_for_app_store_review` | `asc builds upload` (fast, no wait) + `asc review submit` | Replaces the original `publish_to_app_store` blocking call. Upload returns in 2-5 min; agent polls `list_asc_builds` until VALID; submit is near-instant. |
 | `validate_app_submission` | `asc validate` | Preflight readiness report; catches missing metadata/compliance before a doomed submission |
 | `set_version_metadata` | `asc apps info edit` / `asc localizations` | "What's New" is mandatory every release; submission is unusable without it |
 | `set_export_compliance` | `asc encryption` | A missing declaration silently blocks TestFlight distribution |
