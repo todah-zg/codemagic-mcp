@@ -35,7 +35,7 @@ if (!process.env.GOOGLE_PLAY_SERVICE_ACCOUNT_CREDENTIALS) {
 const server = new McpServer({
   name: "codemagic-mcp",
   description: "MCP server for Codemagic CI/CD, App Store Connect, and Google Play",
-  version: "0.1.2",
+  version: "0.3.0",
 });
 
 // Register tools by domain
