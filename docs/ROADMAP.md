@@ -87,7 +87,7 @@ Gaps identified via competitive analysis (June 2026):
 | `cancel_build` | ✓ complete | If an agent triggers the wrong build, it has no way to stop it. One POST call. |
 | `get_user` / `list_teams` | ✓ complete | The agent can't discover which teams the token belongs to — `list_builds` requires a `team_id` that must be known in advance. `list_teams` solves the discovery problem. |
 | `get_build_logs` | ✓ complete | Fetch per-step log text via v1 API (`api.codemagic.io/builds/{id}/step/{step_id}`). |
-| Instance type on `trigger_build` | Medium | Templates hardcode the machine type; the agent can't override it without editing the full YAML. An `instance_type` parameter would allow a one-line override at trigger time. |
+| Instance type on `trigger_build` | ✓ complete | `instance_type` parameter added. Confirmed via v1 API test — `instanceType` in the trigger payload overrides the YAML setting. |
 | `update_variable` / `delete_variable` | Low | CRUD completeness for variable management |
 | `list_caches` / `delete_caches` | Low | Useful when debugging slow builds or storage exhaustion |
 | `create_public_artifact_url` | Low | Share IPA/AAB links externally without requiring Codemagic auth |

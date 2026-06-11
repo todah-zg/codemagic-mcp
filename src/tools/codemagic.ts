@@ -105,8 +105,11 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       groups: z.array(z.string()).optional().describe("Environment variable groups to include"),
       labels: z.array(z.string()).optional().describe("Labels to attach to the build"),
       yaml_content: z.string().optional().describe("A codemagic.yaml file content to use for this build. When provided, the yaml is passed inline and does not need to exist in the repository."),
+      instance_type: z.string().optional().describe(
+        "Override the instance type for this build. Common values: mac_mini_m2, mac_pro, linux, linux_x2, linux_x4, windows_x2. Must be available on your billing plan. If omitted, the instance type from codemagic.yaml is used."
+      ),
     },
-  }, async ({ app_id, workflow_id, branch, tag, variables, groups, labels, yaml_content }) => {
+  }, async ({ app_id, workflow_id, branch, tag, variables, groups, labels, yaml_content, instance_type }) => {
     if (!branch && !tag) {
       return {
         content: [{ type: "text", text: "Error: either branch or tag must be provided." }],
@@ -120,6 +123,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       tag,
       environment: { variables, groups },
       labels: labels ?? [],
+      instanceType: instance_type,
     }, yaml_content);
     const buildUrl = `https://codemagic.io/app/${app_id}/build/${buildId}`;
     return {

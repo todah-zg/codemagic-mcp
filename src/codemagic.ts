@@ -136,6 +136,7 @@ export interface TriggerBuildParams {
     groups?: string[];
   };
   labels: string[];
+  instanceType?: string;
 }
 
 /**
