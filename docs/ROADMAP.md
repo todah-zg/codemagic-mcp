@@ -96,12 +96,7 @@ Gaps identified via competitive analysis (June 2026):
 
 The current `wait_for_build` design has a fundamental impedance mismatch: MCP clients timeout in ~60 seconds, but a Codemagic build machine takes 45–60 seconds just to spin up. With a 30-second polling interval, the tool gets at most one status check before hitting the timeout — and that check almost always returns "still building" because the machine hasn't even started executing yet.
 
-The re-entrant "call again" pattern we shipped is correct in structure. But several things need adjustment:
-
-- The default `max_wait_seconds` should drop from 55 to ~30 — one check with headroom, not two
-- The default `interval_seconds` should drop to 10–15s so the check actually happens before timeout
-- Tool descriptions and prompt playbooks should explicitly tell agents that calling `get_build` or `wait_for_build` 10–20 times across a 10–40 minute build is normal — the "still building" response is a success, not an error
-- Consider whether `wait_for_build` should be simplified to a single-check tool (check once, return status immediately or after one short sleep) and let the agent handle retry cadence — that is the more correct MCP architecture
+✓ **Resolved.** `wait_for_build` is now a single-check tool — it calls `getBuild` once and returns immediately. Non-terminal status returns "call again with the same build_id"; terminal status returns full details and artifacts. The agent controls retry cadence. The description explicitly tells agents that 20+ calls across a 10–40 minute build is normal.
 
 **Medium term:** MCP streaming responses let a single tool call emit status updates over time — no repeated calls, no client-side timeout. Worth tracking the MCP spec here.
 

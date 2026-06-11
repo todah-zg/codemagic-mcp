@@ -261,7 +261,7 @@ export async function addApplication(
 }
 
 /** Terminal build statuses — a build in one of these states will not progress further. */
-const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
+export const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
 
 /**
  * Poll a build until it reaches a terminal state, then return it.
@@ -270,28 +270,15 @@ const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", 
  * @param buildId - The build ID to wait for.
  * @param intervalSeconds - Polling interval in seconds. Default is 30.
  */
-export async function waitForBuild(
-  apiToken: string,
-  buildId: string,
-  intervalSeconds = 30,
-  maxWaitSeconds = 55
-): Promise<Build> {
-  const deadline = Date.now() + maxWaitSeconds * 1000;
-
-  while (true) {
-    const build = await getBuild(apiToken, buildId);
-    if (TERMINAL_STATUSES.has(build.status)) {
-      return build;
-    }
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      throw new Error(
-        `Build ${buildId} is still "${build.status}" after ${maxWaitSeconds}s — ` +
-        `call wait_for_build again with the same build_id to continue polling.`
-      );
-    }
-    await new Promise(resolve => setTimeout(resolve, Math.min(intervalSeconds * 1000, remaining)));
-  }
+/**
+ * Check the current status of a build. Returns immediately — no polling loop.
+ * The caller is responsible for re-invoking until a terminal status is reached.
+ * Use TERMINAL_STATUSES to check whether the returned build has finished.
+ * @param apiToken - Codemagic API token.
+ * @param buildId - The build ID to check.
+ */
+export async function waitForBuild(apiToken: string, buildId: string): Promise<Build> {
+  return getBuild(apiToken, buildId);
 }
 
 export interface VariableGroup {

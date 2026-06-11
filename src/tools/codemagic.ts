@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -128,14 +128,23 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   });
 
   server.registerTool("wait_for_build", {
-    description: "Wait for a Codemagic build to complete, polling until a terminal state is reached. Waits up to max_wait_seconds (default 55), then returns a 'still building' message — call again with the same build_id to continue polling. Returns final build details and artifact download URLs on completion.",
+    description:
+      "Check the current status of a Codemagic build. Returns immediately — no polling loop. " +
+      "If the build has not finished, call this tool again with the same build_id. " +
+      "A Codemagic build takes 10–40 minutes; calling this 20+ times is normal and expected. " +
+      "Returns full build details and artifact download URLs once a terminal state is reached.",
     inputSchema: {
-      build_id: z.string().describe("The Codemagic build ID to wait for"),
-      interval_seconds: z.number().optional().describe("How often to poll in seconds (default: 30)"),
-      max_wait_seconds: z.number().optional().describe("Maximum seconds to wait before returning 'still building' (default: 55). Call again with the same build_id to resume polling."),
+      build_id: z.string().describe("The Codemagic build ID to check"),
     },
-  }, async ({ build_id, interval_seconds, max_wait_seconds }) => {
-    const build = await waitForBuild(apiToken, build_id, interval_seconds, max_wait_seconds);
+  }, async ({ build_id }) => {
+    const build = await waitForBuild(apiToken, build_id);
+
+    if (!TERMINAL_STATUSES.has(build.status)) {
+      return {
+        content: [{ type: "text", text: `Build #${build.index} is still "${build.status}". Call wait_for_build again with the same build_id to continue polling.` }],
+      };
+    }
+
     const artifactLines = build.artifacts.map(a =>
       `  - ${a.name} (${a.type})\n    ${a.short_lived_download_url}`
     ).join("\n");
