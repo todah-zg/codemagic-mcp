@@ -6,14 +6,14 @@ An MCP (Model Context Protocol) server that gives AI agents a unified surface ov
 
 The server exposes tools across four domains:
 
-- **Codemagic** — list teams and apps, trigger builds, wait for results, retrieve artifacts, fetch build logs, manage variable groups and webhooks
-- **App Store Connect** — list builds, manage TestFlight, check review/release status, upload IPAs, set metadata, validate, submit, and release to the App Store
-- **Google Play** — list tracks, publish AABs, promote releases, manage staged rollouts, share builds internally
+- **Codemagic** — list teams and apps, trigger builds, wait for results, retrieve artifacts, fetch build logs, manage variable groups, caches, and webhooks
+- **App Store Connect** — manage TestFlight, upload and submit builds, set listing text and screenshots, validate, submit, and release to the App Store
+- **Google Play** — publish AABs, promote releases, manage staged rollouts, set listing text and screenshots
 - **Cross-store** — validate localized release notes against platform char limits and BCP-47 locale codes
 
 The intended end-to-end flows are:
 
-**iOS:** `list_asc_builds` → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_testflight` → `set_version_metadata` → `validate_app_submission` → `publish_to_app_store` → `release_version`
+**iOS:** `list_asc_builds` → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_build_to_asc` → `set_version_metadata` → `validate_app_submission` → `submit_for_app_store_review` → `release_version`
 
 **Android:** `get_latest_build_number` → `get_yaml_template` → `trigger_build` → `wait_for_build` → `upload_to_google_play` → `promote_google_play_release`
 
@@ -202,13 +202,16 @@ You can also describe what you want in plain language — Claude will select the
 | `list_builds` | List builds with optional filters (app, status, branch, workflow) |
 | `get_build` | Get full details for a single build including artifacts |
 | `get_build_logs` | Fetch per-step log text for a build — by default returns failed steps only |
-| `trigger_build` | Trigger a build; optionally supply an inline `codemagic.yaml` |
-| `wait_for_build` | Poll until a build reaches a terminal state; returns artifacts |
+| `trigger_build` | Trigger a build; optionally supply an inline `codemagic.yaml` or override `instance_type` |
+| `wait_for_build` | Single-check tool — returns status immediately; call again until terminal state |
 | `cancel_build` | Cancel a running or queued build |
 | `add_application` | Connect a Git repository to Codemagic; auto-generates SSH deploy keys for SSH URLs |
 | `get_webhook_url` | Get the incoming webhook URL to paste into your Git provider settings |
 | `list_webhooks` | List webhook subscriptions configured for an app |
 | `delete_webhook` | Delete a webhook subscription from an app |
+| `list_caches` | List build caches for an app |
+| `delete_cache` | Delete all caches or a specific cache by ID |
+| `create_public_artifact_url` | Create a time-limited public download URL for a build artifact |
 
 ### App Store Connect (iOS)
 
@@ -226,9 +229,14 @@ You can also describe what you want in plain language — Claude will select the
 | `set_export_compliance` | Declare encryption usage for a build (required before App Store submission) |
 | `set_version_metadata` | Set "What's New" text and other per-locale metadata for an App Store version |
 | `validate_app_submission` | Preflight check — returns an ordered list of blockers before submission |
-| `publish_to_app_store` | Upload IPA and optionally submit for review (long-running: 20–40 min) |
+| `upload_build_to_asc` | Upload an IPA to App Store Connect (fast, non-blocking); poll `list_asc_builds` until VALID |
+| `submit_for_app_store_review` | Attach a processed build to a version and submit for App Store review |
 | `release_version` | Release an approved App Store version immediately |
 | `set_phased_release` | Create, pause, resume, or complete a phased rollout |
+| `get_ios_store_listing` | Pull current App Store listing text for all locales (name, description, keywords, etc.) |
+| `set_ios_store_listing` | Update App Store listing text for a locale — only provided fields are changed |
+| `list_ios_screenshot_types` | List supported screenshot device types and their required pixel dimensions |
+| `upload_ios_screenshots` | Download screenshots from URLs and upload to App Store Connect for a device type and locale |
 
 ### Google Play (Android)
 
@@ -241,6 +249,9 @@ You can also describe what you want in plain language — Claude will select the
 | `promote_google_play_release` | Promote a release between tracks (internal → alpha → beta → production) |
 | `set_rollout_fraction` | Expand, halt, or resume a staged rollout by setting the user fraction |
 | `share_app_internally` | Upload an AAB to Internal App Sharing for instant QA install links |
+| `get_android_store_listing` | Fetch current Google Play store listing for a language (title, descriptions) |
+| `set_android_store_listing` | Update Google Play store listing for a language — only provided fields are changed |
+| `upload_android_screenshots` | Download screenshots from URLs and upload to Google Play for a language and device type |
 
 ### Cross-store
 
@@ -252,16 +263,19 @@ You can also describe what you want in plain language — Claude will select the
 
 | Tool | Description |
 |------|-------------|
-| `list_variable_groups` | List variable groups for a team or app — use group names to reference them in builds |
+| `list_variable_groups` | List variable groups for a team or app |
 | `create_variable_group` | Create a new variable group (team or app scoped) |
 | `add_variable` | Add a non-secret variable to a group |
+| `list_variables` | List variables in a group (required to get IDs before updating or deleting) |
+| `update_variable` | Update the name or value of a variable by ID |
+| `delete_variable` | Delete a variable from a group by ID |
 
 ### YAML
 
 | Tool | Description |
 |------|-------------|
 | `validate_codemagic_yaml` | Validate a `codemagic.yaml` against the official Codemagic JSON schema |
-| `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, dotnet-maui — plus android-debug, flutter-android-debug, react-native-android-debug for initial onboarding |
+| `get_yaml_template` | Get a starter `codemagic.yaml` for android, ios, flutter, flutter-native, react-native, ionic-capacitor, ionic-cordova, kmm, snap, unity, unity-oculus, dotnet-maui, ios-screenshots, android-screenshots, flutter-screenshots — plus android-debug, flutter-android-debug, react-native-android-debug for initial onboarding |
 | `list_yaml_template_types` | List all supported project types for `get_yaml_template` |
 | `detect_project_type` | Detect the project type from a repository file listing — returns the recommended template and debug template to start with |
 
@@ -283,6 +297,7 @@ src/
   codemagic.ts          — Codemagic API functions (v3 + v1)
   asc.ts                — App Store Connect CLI wrapper
   googleplay.ts         — Google Play CLI wrapper
+  androidpublisher.ts   — Google Play androidpublisher REST API client (listings, screenshots)
   ssh.ts                — SSH key generation and deploy key setup
   yaml.ts               — YAML validation logic
   templates.ts          — Static codemagic.yaml templates

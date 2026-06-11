@@ -10,7 +10,7 @@ crossing it.
 
 ---
 
-## Where we are (Phase 2 — complete)
+## Where we are (Phase 3 — in progress)
 
 **Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
@@ -29,9 +29,16 @@ release note validation, and full Codemagic API coverage. iOS adds: `upload_buil
 redesigned as single-check. Cross-store adds: `prepare_release_notes`. Both
 `/ios_release` and `/android_release` prompts updated end-to-end.
 
-What we can NOT do today: manage store **listings** (descriptions, screenshots, metadata),
-generate store assets, or guide a first-time publisher through the parts that genuinely
-require a human (app record creation, privacy labels, compliance forms).
+**Phase 3 (partial):** Store listings and screenshots. iOS adds: `get_ios_store_listing`,
+`set_ios_store_listing`, `list_ios_screenshot_types`, `upload_ios_screenshots`. Android
+adds: `get_android_store_listing`, `set_android_store_listing`, `upload_android_screenshots`
+via a new `androidpublisher.ts` direct API client (google-play CLI has no listing or image
+support). New `codemagic.yaml` templates: `ios-screenshots` (Maestro + iOS simulator),
+`android-screenshots` (Maestro + Android emulator on Linux), `flutter-screenshots`
+(Flutter golden tests, no emulator). Total: 64 tools, 18 templates.
+
+What we can NOT do today: Android data safety form, first-publish guidance (app record
+creation, privacy labels, compliance forms are UI-only on both stores).
 
 ---
 
@@ -127,25 +134,28 @@ Apple's processing time (10–30 min) is now handled by the agent polling `list_
 
 *After the loop works, make the store listing itself agent-manageable.*
 
-- **Store listing text** — iOS via `asc metadata pull/validate/apply` (it even has
-  a deterministic sync workflow and fastlane migration); Android via
-  `edits.listings` (direct API — the google-play CLI does not cover listings).
-- **Screenshot upload** — iOS via `asc screenshots upload/plan/apply` (handles the
-  chunked upload protocol for us); Android via `edits.images` per locale + type.
-- **Screenshot capture templates** — new yaml templates that produce screenshots
-  as build artifacts:
-  - Flutter golden tests at store resolutions (Codemagic's own documented
-    approach; no emulator/simulator needed — works on any instance type)
-  - fastlane snapshot for native iOS (simulators work on the M-series Macs)
-  - Constraint to encode in templates: **Codemagic Apple-silicon Macs cannot run
-    Android emulators** — Android capture goes on Linux instances or via golden
-    tests
-- **Caption/frame pipeline** — agent reviews captured screenshots, writes
-  localized captions; `asc screenshots frame` (experimental) or frameit for
-  device frames. Store policy note: screenshots must reflect the real app — AI
-  frames and captions real captures, never fabricates screens.
+- ✓ **Store listing text** — iOS via `asc metadata pull/validate/apply`; Android via
+  direct `edits.listings` API (google-play CLI has no listing support). New
+  `androidpublisher.ts` client handles service account JWT auth, edit lifecycle, and
+  PATCH. Tools: `get_ios_store_listing`, `set_ios_store_listing`,
+  `get_android_store_listing`, `set_android_store_listing`.
+- ✓ **Screenshot upload** — iOS via `asc screenshots upload` (fan-out mode, locale
+  subdir); Android via `edits.images` simple upload with `?uploadType=media`. Both
+  accept individual artifact URLs from Codemagic builds. Tools:
+  `list_ios_screenshot_types`, `upload_ios_screenshots`, `upload_android_screenshots`.
+- ✓ **Screenshot capture templates** — three new `codemagic.yaml` templates:
+  - `ios-screenshots` — Maestro + iOS simulator on `mac_mini_m2`
+  - `android-screenshots` — Maestro + Android emulator on `linux_x2`
+  - `flutter-screenshots` — Flutter golden tests at store dimensions (no simulator)
+  - Screenshot filenames encode locale and device type (`screenshots/{locale}/{device_type}/`)
+    so the agent can route artifact URLs to the correct upload call without guessing.
+  - Maestro chosen over fastlane snapshot: YAML-based flows, cross-platform, lower barrier.
+- **Caption/frame pipeline** — deferred. `asc screenshots frame` is experimental;
+  store policy requires screenshots to reflect the real app. Deferred until the
+  experimental commands stabilise.
 - **Data safety form (Android)** — `applications.dataSafety` accepts the CSV
-  declaration via API; one of the few compliance forms that IS automatable.
+  declaration via API; one of the few compliance forms that IS automatable. Not yet
+  implemented.
 
 ---
 
