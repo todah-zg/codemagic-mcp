@@ -90,7 +90,15 @@ Gaps identified via competitive analysis (June 2026):
 | Instance type on `trigger_build` | ✓ complete | `instance_type` parameter added. Confirmed via v1 API test — `instanceType` in the trigger payload overrides the YAML setting. |
 | `update_variable` / `delete_variable` | ✓ complete | CRUD completeness for variable management. |
 | `list_caches` / `delete_cache` | ✓ complete | Available via v1 API (`/apps/{id}/caches`). `delete_cache` accepts an optional `cache_id` — omit to delete all. |
-| `create_public_artifact_url` | Not possible | No public artifact URL endpoint in the v3 API. |
+| `create_public_artifact_url` | ✓ complete | Available via v1 API (`POST /artifacts/{secureFilename}/public-url`). Accepts an artifact URL from `get_build`/`wait_for_build` and an `expires_in_hours` parameter (default 24). |
+
+### White-label / matrix builds
+
+Inspired by the Codemagic dynamic workflows pattern: one `codemagic.yaml` workflow triggered N times with different variable sets to produce N differently-branded artifacts (bundle ID, app name, branding URLs, signing identity). Common for white-label apps and multi-flavor Android builds.
+
+| Tool | Notes |
+|---|---|
+| `trigger_build_matrix` | Accepts a base trigger config + a list of variable sets. Fires one build per set in parallel, returns all build IDs immediately. The agent then polls each with `wait_for_build`. |
 
 ### Rethinking build status polling
 

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache, createPublicArtifactUrl } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -414,6 +414,25 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     const target = cache_id ? `cache ${cache_id}` : `all caches`;
     return {
       content: [{ type: "text", text: `Deletion started for ${target}. IDs queued: ${deleted.join(", ")}` }],
+    };
+  });
+
+  server.registerTool("create_public_artifact_url", {
+    description:
+      "Create a time-limited public download URL for a build artifact. " +
+      "Pass the artifact URL from get_build or wait_for_build. " +
+      "The returned URL is accessible without authentication — anyone with the link can download the artifact. " +
+      "Use for sharing IPAs or AABs with testers who don't have Codemagic access.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      artifact_url: z.string().describe("The short_lived_download_url from a build artifact (returned by get_build or wait_for_build)"),
+      expires_in_hours: z.number().optional().describe("How many hours until the public URL expires (default: 24, max: practical limit is a few days)"),
+    },
+  }, async ({ artifact_url, expires_in_hours = 24 }) => {
+    const expiresAt = Math.floor(Date.now() / 1000) + expires_in_hours * 3600;
+    const result = await createPublicArtifactUrl(apiToken, artifact_url, expiresAt);
+    return {
+      content: [{ type: "text", text: `Public URL (expires ${result.expiresAt}):\n${result.url}` }],
     };
   });
 

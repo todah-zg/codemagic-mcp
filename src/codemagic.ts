@@ -491,6 +491,37 @@ export async function deleteCache(apiToken: string, appId: string, cacheId?: str
   return data.caches;
 }
 
+/**
+ * Create a time-limited public download URL for a build artifact.
+ * The artifact URL comes from getBuild() or waitForBuild() — it has the form
+ * https://api.codemagic.io/artifacts/{secureFilename}. The secureFilename is
+ * extracted and used to POST to the public-url endpoint.
+ * WARNING: public URLs are accessible without authentication — share carefully.
+ * @param apiToken - Codemagic API token.
+ * @param artifactUrl - The short_lived_download_url from a build artifact.
+ * @param expiresAt - URL expiry as a Unix timestamp in seconds.
+ * @returns The public download URL and its expiry datetime string.
+ */
+export async function createPublicArtifactUrl(
+  apiToken: string,
+  artifactUrl: string,
+  expiresAt: number
+): Promise<{ url: string; expiresAt: string }> {
+  const prefix = `${BASE_URL_V1}/artifacts/`;
+  if (!artifactUrl.startsWith(prefix)) {
+    throw new Error(`Unexpected artifact URL format: ${artifactUrl}`);
+  }
+  const secureFilename = artifactUrl.slice(prefix.length);
+  const response = await fetch(`${BASE_URL_V1}/artifacts/${secureFilename}/public-url`, {
+    method: "POST",
+    headers: { "x-auth-token": apiToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ expiresAt }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  return response.json() as Promise<{ url: string; expiresAt: string }>;
+}
+
 // ─── Webhooks ────────────────────────────────────────────────────────────────
 
 export interface Webhook {
