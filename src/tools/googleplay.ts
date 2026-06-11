@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
-import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots, setAndroidDataSafety } from "../androidpublisher.js";
+import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots, setAndroidDataSafety, listGooglePlayReviews, replyToGooglePlayReview } from "../androidpublisher.js";
 
 export function registerGooglePlayTools(server: McpServer): void {
 
@@ -206,6 +206,58 @@ export function registerGooglePlayTools(server: McpServer): void {
     return {
       content: [{ type: "text", text: `Uploaded ${screenshot_urls.length} screenshot(s) for ${image_type} / ${language}.` }],
     };
+  });
+
+  server.registerTool("list_google_play_reviews", {
+    description:
+      "List recent Google Play user reviews for an app. " +
+      "Only reviews that contain text are returned — star-only ratings are excluded by the API. " +
+      "Use max_star_rating to focus on negative reviews (e.g. max_star_rating=2 for 1–2 star reviews). " +
+      "Each review includes the review ID needed for reply_to_google_play_review. " +
+      "Reviews are ordered by last modified date, most recent first.",
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      max_results: z.number().int().min(1).max(500).default(50).describe("Maximum number of reviews to return (1–500, default 50). Pages of 100 are fetched transparently until the limit is reached."),
+      max_star_rating: z.number().int().min(1).max(5).optional().describe("Filter to reviews at or below this star rating — e.g. 2 returns only 1 and 2 star reviews"),
+      translation_language: z.string().optional().describe("BCP-47 language code to translate review text into (e.g. en-US). Useful for apps with non-English reviews."),
+    },
+  }, async ({ package_name, max_results, max_star_rating, translation_language }) => {
+    let reviews = await listGooglePlayReviews(package_name, max_results, translation_language);
+    if (max_star_rating !== undefined) {
+      reviews = reviews.filter(r => r.userComment.starRating <= max_star_rating);
+    }
+    if (reviews.length === 0) {
+      return { content: [{ type: "text", text: "No reviews found matching the filter." }] };
+    }
+    const stars = (n: number) => "★".repeat(n) + "☆".repeat(5 - n);
+    const lines = reviews.flatMap(r => {
+      const header = `${stars(r.userComment.starRating)}  ${r.authorName}  —  ${r.userComment.lastModified}`;
+      const body   = `  ${r.userComment.text}`;
+      const reply  = r.developerComment
+        ? `  Developer replied: ${r.developerComment.text}`
+        : `  [no developer reply]`;
+      const id = `  ID: ${r.reviewId}`;
+      return [header, body, reply, id, ""];
+    });
+    return { content: [{ type: "text", text: lines.join("\n").trimEnd() }] };
+  });
+
+  server.registerTool("reply_to_google_play_review", {
+    description:
+      "Post or update a developer reply to a Google Play user review. " +
+      "Replies are limited to 350 characters. " +
+      "If the review already has a developer reply, this call replaces it. " +
+      "Get the review_id from list_google_play_reviews. " +
+      "Write a personal, helpful reply — responding to negative reviews improves store ratings and user trust.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      review_id: z.string().describe("Review ID from list_google_play_reviews"),
+      reply_text: z.string().max(350).describe("Developer reply text — max 350 characters"),
+    },
+  }, async ({ package_name, review_id, reply_text }) => {
+    await replyToGooglePlayReview(package_name, review_id, reply_text);
+    return { content: [{ type: "text", text: `Reply posted to review ${review_id}.` }] };
   });
 
   server.registerTool("set_android_data_safety", {

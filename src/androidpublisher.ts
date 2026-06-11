@@ -278,3 +278,127 @@ export async function setAndroidDataSafety(packageName: string, csv: string): Pr
     throw new Error(`setDataSafety failed (${response.status}): ${text.slice(0, 200)}`);
   }
 }
+
+// ---------------------------------------------------------------------------
+// Reviews API — outside the edit lifecycle
+// ---------------------------------------------------------------------------
+
+export interface ReviewUserComment {
+  text: string;
+  starRating: number;
+  /** ISO 8601 timestamp */
+  lastModified: string;
+  reviewerLanguage: string;
+}
+
+export interface ReviewDeveloperComment {
+  text: string;
+  lastModified: string;
+}
+
+export interface Review {
+  reviewId: string;
+  authorName: string;
+  userComment: ReviewUserComment;
+  developerComment?: ReviewDeveloperComment;
+}
+
+/**
+ * List recent Google Play reviews for an app, with transparent pagination.
+ * Only reviews that contain text are returned (ratings without comments are excluded by the API).
+ * Fetches pages of 100 until maxResults is reached or no more pages exist.
+ * @param packageName - Android package name.
+ * @param maxResults - Maximum reviews to fetch (1–500, default 50).
+ * @param translationLanguage - BCP-47 language to translate review text into (optional).
+ */
+export async function listGooglePlayReviews(
+  packageName: string,
+  maxResults = 50,
+  translationLanguage?: string,
+): Promise<Review[]> {
+  const token = await getAccessToken();
+  const allReviews: Review[] = [];
+  let pageToken: string | undefined;
+
+  while (allReviews.length < maxResults) {
+    const remaining = maxResults - allReviews.length;
+    const pageSize = Math.min(remaining, 100);
+    const params = new URLSearchParams({ maxResults: String(pageSize) });
+    if (translationLanguage) params.set("translationLanguage", translationLanguage);
+    if (pageToken) params.set("token", pageToken);
+
+    const response = await fetch(
+      `${PUBLISHER_BASE}/${packageName}/reviews?${params}`,
+      { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }
+    );
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`listReviews failed (${response.status}): ${text.slice(0, 200)}`);
+    }
+    const body = await response.json() as { reviews?: unknown[]; tokenPagination?: { nextPageToken?: string } };
+    const raw = (body.reviews ?? []) as Array<{
+    reviewId: string;
+    authorName: string;
+    comments: Array<{
+      userComment?: { text?: string; starRating?: number; lastModified?: { seconds?: string }; reviewerLanguage?: string };
+      developerComment?: { text?: string; lastModified?: { seconds?: string } };
+    }>;
+  }>;
+
+    const toIso = (seconds?: string) =>
+      seconds ? new Date(parseInt(seconds, 10) * 1000).toISOString().slice(0, 10) : "";
+
+    for (const r of raw) {
+      const userRaw = r.comments.find(c => c.userComment)?.userComment ?? {};
+      const devRaw  = r.comments.find(c => c.developerComment)?.developerComment;
+      allReviews.push({
+        reviewId: r.reviewId,
+        authorName: r.authorName ?? "Anonymous",
+        userComment: {
+          text: userRaw.text ?? "",
+          starRating: userRaw.starRating ?? 0,
+          lastModified: toIso(userRaw.lastModified?.seconds),
+          reviewerLanguage: userRaw.reviewerLanguage ?? "",
+        },
+        developerComment: devRaw ? {
+          text: devRaw.text ?? "",
+          lastModified: toIso(devRaw.lastModified?.seconds),
+        } : undefined,
+      });
+    }
+
+    pageToken = body.tokenPagination?.nextPageToken;
+    if (!pageToken || raw.length === 0) break;
+  }
+
+  return allReviews;
+}
+
+/**
+ * Post or update a developer reply to a Google Play review.
+ * Replies are limited to 350 characters. Posting a reply to a review that already
+ * has one will replace the existing reply.
+ * @param packageName - Android package name.
+ * @param reviewId - Review ID from listGooglePlayReviews.
+ * @param replyText - Developer reply text (max 350 characters).
+ */
+export async function replyToGooglePlayReview(
+  packageName: string,
+  reviewId: string,
+  replyText: string,
+): Promise<void> {
+  const token = await getAccessToken();
+  const response = await fetch(
+    `${PUBLISHER_BASE}/${packageName}/reviews/${reviewId}:reply`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ replyText }),
+      signal: AbortSignal.timeout(10_000),
+    }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`replyToReview failed (${response.status}): ${text.slice(0, 200)}`);
+  }
+}
