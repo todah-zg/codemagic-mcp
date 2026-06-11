@@ -129,27 +129,31 @@ Prerequisites:
      ipa_url   — the IPA artifact URL from step 7
      beta_group (optional) — call list_testflight_groups to find available group names
    For external groups: call submit_beta_review with the build ID first (required by Apple).
-10. SET VERSION METADATA
+10. UPLOAD BUILD TO APP STORE CONNECT
+    Call upload_build_to_asc with the ASC app ID and IPA URL.
+    Returns immediately — Apple processes the build in the background (10–30 min).
+    Note the build ID returned.
+11. WAIT FOR BUILD PROCESSING
+    Call list_asc_builds repeatedly until the build's processingState is VALID.
+    This typically takes 10–30 minutes. Calling this 20+ times is normal.
+12. SET VERSION METADATA
     Call set_version_metadata with the ASC app ID, version, and locale.
     Provide whats_new — required by Apple for every release submission.
     Default locale is en-US; repeat for other supported locales if needed.
-11. VALIDATE SUBMISSION
+13. VALIDATE SUBMISSION
     Call validate_app_submission with the ASC app ID and version string.
     The result is an ordered remediation plan — fix the first blocker, then call again.
     Continue until the validation passes with no blockers.
-12. PUBLISH TO APP STORE
-    Call publish_to_app_store with app_id, ipa_url, and version.
-    WARNING: this is a long-running operation (20–40 minutes).
+14. SUBMIT FOR REVIEW
     Optional: for a phased rollout, call set_phased_release with action="create" first.
-    Once the build is attached, call publish_to_app_store again with submit_for_review=true
-    to submit for review.
-13. MONITOR REVIEW
+    Call submit_for_app_store_review with the ASC app ID, version, and build ID from step 10.
+15. MONITOR REVIEW
     Call get_asc_review_status to track progress.
     Apple review typically takes 24–48 hours.
     When approved, the version enters "Pending Developer Release" state.
-14. RELEASE
+16. RELEASE
     Call release_version to release the version immediately.
-    Or if you configured phased rollout in step 12, it starts automatically on release.
+    Or if you configured phased rollout in step 14, it starts automatically on release.
     To pause an in-progress rollout: call set_phased_release with action="pause".
     To complete it early: action="complete".
 `.trim();

@@ -112,13 +112,11 @@ The current `wait_for_build` design has a fundamental impedance mismatch: MCP cl
 
 ### Long-running App Store operations
 
-`publish_to_app_store` has the same impedance mismatch. The current implementation uses `asc publish appstore --wait`, which blocks for the full upload + Apple build processing + version attachment — up to 40 minutes in one tool call. This works with Claude Desktop today (no hard timeout), but is fragile for any client that enforces a timeout.
+✓ **Resolved.** `publish_to_app_store` (the 40-minute blocking call) has been replaced by two fast tools:
+1. **`upload_build_to_asc`** — `asc builds upload` (no `--wait`), returns in ~2-5 minutes once the upload commits.
+2. **`submit_for_app_store_review`** — `asc review submit`, attaches the VALID build to the version and submits for review. Near-instant.
 
-The correct fix is to split into two steps:
-1. **Upload only** — `asc builds upload --app … --ipa …` (no `--wait`), returns in ~2 minutes with the build in processing state. A `build_number` or build ID is returned for polling.
-2. **Attach + submit** — a separate call once the agent observes `processingState: VALID` via `list_asc_builds` or `get_asc_release_status`. Then attaches the build to the App Store version and optionally submits.
-
-This mirrors the `wait_for_build` re-entrant pattern: fast initial action, agent polls for completion, then acts on the result.
+Apple's processing time (10–30 min) is now handled by the agent polling `list_asc_builds` between the two calls — the same re-entrant pattern as `wait_for_build`. The `/ios_release` prompt updated to reflect the new 16-step flow.
 
 ---
 

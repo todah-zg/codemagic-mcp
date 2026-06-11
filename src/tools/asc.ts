@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, publishToAppStore, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup } from "../asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup } from "../asc.js";
 
 export function registerAscTools(server: McpServer): void {
 
@@ -299,39 +299,54 @@ export function registerAscTools(server: McpServer): void {
     };
   });
 
-  server.registerTool("publish_to_app_store", {
+  server.registerTool("upload_build_to_asc", {
     description:
-      "Download an IPA artifact from Codemagic and publish it to the App Store. " +
-      "Uploads the IPA, waits for Apple build processing (5–15 min), and attaches the build to the App Store version. " +
-      "WARNING: this is a long-running operation — the full call can take 20–40 minutes. " +
-      "Set submit_for_review to true to also submit for review in the same call — only do this when " +
-      "version metadata (What's New text) and export compliance are already set. " +
-      "After uploading without submitting, use get_asc_release_status to verify readiness.",
-    annotations: {
-      readOnlyHint: false,
-      destructiveHint: false,
-    },
+      "Download an IPA from a Codemagic artifact URL and upload it to App Store Connect. " +
+      "Returns immediately once the upload commits — does NOT wait for Apple's processing pipeline. " +
+      "After calling this, poll list_asc_builds until the build's processingState is VALID, " +
+      "then call submit_for_app_store_review with the build ID.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
       ipa_url: z.string().describe("The IPA download URL from a Codemagic build artifact"),
-      version: z.string().optional().describe("App Store version string e.g. '1.2.3' — defaults to the version embedded in the IPA"),
-      submit_for_review: z.boolean().optional().describe("Submit for App Store review after attaching the build (default: false)"),
     },
-  }, async ({ app_id, ipa_url, version, submit_for_review }) => {
-    const result = await publishToAppStore(app_id, ipa_url, version, submit_for_review ?? false);
-    const lines = [
-      submit_for_review
-        ? "IPA uploaded and submitted for App Store review."
-        : "IPA uploaded and attached to App Store version.",
-      result,
-      "",
-      submit_for_review
-        ? "Track review progress with get_asc_review_status."
-        : "Next: call get_asc_release_status to verify readiness, then call publish_to_app_store again with submit_for_review=true when ready.",
-    ];
+  }, async ({ app_id, ipa_url }) => {
+    const build = await uploadBuildToAsc(app_id, ipa_url);
     return {
-      content: [{ type: "text", text: lines.join("\n") }],
+      content: [{
+        type: "text",
+        text: [
+          "IPA uploaded successfully. Apple is now processing the build.",
+          `Build ID: ${build.id}`,
+          `Build number: ${build.buildNumber}`,
+          `Version: ${build.version}`,
+          "",
+          "Next: poll list_asc_builds until processingState is VALID, then call submit_for_app_store_review.",
+        ].join("\n"),
+      }],
     };
   });
+
+  server.registerTool("submit_for_app_store_review", {
+    description:
+      "Attach a processed build to an App Store version and submit it for review. " +
+      "The build must have processingState VALID — confirm with list_asc_builds before calling. " +
+      "Requires version metadata (What's New) and export compliance to be set first. " +
+      "Use validate_app_submission to catch blockers before submitting.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+      build_id: z.string().describe("Build UUID from upload_build_to_asc or list_asc_builds"),
+    },
+  }, async ({ app_id, version, build_id }) => {
+    await submitForAppStoreReview(app_id, version, build_id);
+    return {
+      content: [{
+        type: "text",
+        text: "Submitted for App Store review. Track progress with get_asc_review_status.",
+      }],
+    };
+  });  
 
 }

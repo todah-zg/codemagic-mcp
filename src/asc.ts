@@ -228,42 +228,52 @@ export async function uploadToTestFlight(
   }
 }
 
+export interface AscBuildUploadResult {
+  id: string;
+  buildNumber: string;
+  version: string;
+}
+
 /**
- * Download an IPA from a URL and publish it to the App Store via the asc CLI.
- * Uploads the IPA, waits for build processing, creates/finds the App Store version,
- * and attaches the build. Pass submitForReview=true to also submit for review.
+ * Download an IPA from a URL and upload it to App Store Connect.
+ * Does NOT wait for Apple's processing pipeline — returns as soon as the upload commits (~2-5 min).
+ * Poll list_asc_builds until processingState is VALID before calling submitForAppStoreReview.
  * @param appId - The App Store Connect app ID.
  * @param ipaUrl - Direct download URL for the IPA (e.g. a Codemagic artifact URL).
- * @param version - App Store version string (e.g. "1.2.3"). Defaults to version in IPA.
- * @param submitForReview - If true, submits for App Store review after attaching the build.
+ * @returns Build ID, build number, and version string for use in subsequent calls.
  */
-export async function publishToAppStore(
-  appId: string,
-  ipaUrl: string,
-  version?: string,
-  submitForReview = false,
-): Promise<string> {
+export async function uploadBuildToAsc(appId: string, ipaUrl: string): Promise<AscBuildUploadResult> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
-
   const response = await fetch(ipaUrl);
-  if (!response.ok) {
-    throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
   if (!response.body) throw new Error("IPA response body is empty");
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
-
   try {
-    const args = ["publish", "appstore", "--app", appId, "--ipa", tempPath, "--wait"];
-    if (version) args.push("--version", version);
-    if (submitForReview) args.push("--submit", "--confirm");
-    const { stdout } = await execFileAsync("asc", args, {
-      maxBuffer: EXEC_BUFFER,
-      timeout: UPLOAD_TIMEOUT_MS,
-    });
-    return stdout;
+    const { stdout } = await execFileAsync("asc", [
+      "builds", "upload", "--app", appId, "--ipa", tempPath, "--output", "json",
+    ], { maxBuffer: EXEC_BUFFER, timeout: UPLOAD_TIMEOUT_MS });
+    const raw = JSON.parse(stdout);
+    const build = Array.isArray(raw.data) ? raw.data[0] : raw.data;
+    if (!build?.id) throw new Error(`Unexpected upload response: ${stdout.slice(0, 200)}`);
+    return {
+      id: build.id,
+      buildNumber: build.attributes?.buildNumber ?? build.buildNumber ?? "unknown",
+      version: build.attributes?.version ?? build.version ?? "unknown",
+    };
   } finally {
     await unlink(tempPath).catch(() => {});
   }
+}
+
+/**
+ * Attach an already-uploaded and VALID build to an App Store version and submit for review.
+ * The build must have processingState VALID — use list_asc_builds to confirm before calling this.
+ * @param appId - The App Store Connect app ID.
+ * @param version - Version string e.g. "1.2.3".
+ * @param buildId - Build UUID from uploadBuildToAsc or listAscBuilds.
+ */
+export async function submitForAppStoreReview(appId: string, version: string, buildId: string): Promise<unknown> {
+  return runAsc(["review", "submit", "--app", appId, "--version", version, "--build", buildId, "--confirm"]);
 }
 
 /** Resolve a version string (e.g. "1.2.3") to its App Store version ID. */
