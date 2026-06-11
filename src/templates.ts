@@ -907,6 +907,171 @@ workflows:
               ./gradlew assembleDebug
         artifacts:
           - android/app/build/outputs/**/*.apk`,
+
+  // ─── Screenshot capture ──────────────────────────────────────────────────────
+
+  "ios-screenshots": `# iOS Screenshots — capture App Store screenshots using Maestro on an iOS simulator.
+# Produces IPHONE_65 screenshots (1284x2778) by default; change SIMULATOR for other sizes.
+#
+# Before triggering:
+#   1. Replace BUNDLE_ID with your app's bundle identifier.
+#   2. Replace the "Build app for simulator" script with your framework's command:
+#        Flutter:  flutter build ios --simulator --debug
+#        RN:       npx react-native build-ios --mode Debug
+#        Xcode:    xcodebuild -scheme SCHEME -destination "platform=iOS Simulator,name=$SIMULATOR" -configuration Debug build
+#   3. Replace the app path in "Install app" with your framework's output path:
+#        Flutter:  find build/ios/iphonesimulator -name "*.app" | head -1
+#        Xcode:    build/Debug-iphonesimulator/MyApp.app
+#   4. Create a Maestro flow at .maestro/screenshots.yaml. Example:
+#        appId: com.example.myapp
+#        ---
+#        - launchApp
+#        - takeScreenshot: "screenshots/en-US/IPHONE_65/01_home"
+#        - tapOn: "Get Started"
+#        - takeScreenshot: "screenshots/en-US/IPHONE_65/02_onboarding"
+#
+# Screenshot artifacts are exposed individually — pass their URLs to upload_ios_screenshots.
+workflows:
+  ios-screenshots:
+    name: iOS Screenshots
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      xcode: latest
+      vars:
+        BUNDLE_ID: com.example.myapp    # Replace with your bundle ID
+        SIMULATOR: iPhone 15 Pro Max    # Produces IPHONE_65 screenshots (1284x2778)
+    scripts:
+      - name: Install Maestro
+        script: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "PATH=$HOME/.maestro/bin:$PATH" >> $CM_ENV
+      - name: Build app for simulator
+        script: |
+          flutter build ios --simulator --debug    # Replace with your build command
+      - name: Boot simulator
+        script: |
+          xcrun simctl boot "$SIMULATOR" || true
+          open -a Simulator
+          xcrun simctl bootstatus "$SIMULATOR" -b
+      - name: Install app on simulator
+        script: |
+          APP_PATH=$(find build/ios/iphonesimulator -name "*.app" | head -1)    # Replace path if not Flutter
+          xcrun simctl install "$SIMULATOR" "$APP_PATH"
+      - name: Capture screenshots
+        script: |
+          mkdir -p screenshots
+          maestro test .maestro/screenshots.yaml
+    artifacts:
+      - screenshots/**/*.png
+      - screenshots/**/*.jpg`,
+
+  "android-screenshots": `# Android Screenshots — capture Google Play screenshots using Maestro on an Android emulator.
+# Runs on a Linux instance where Android emulators are available.
+#
+# Before triggering:
+#   1. Replace PACKAGE_NAME with your app's package name.
+#   2. Replace the "Build debug APK" script with your framework's command:
+#        Flutter:  flutter build apk --debug
+#        RN:       npx react-native build-android --mode debug
+#        Native:   ./gradlew assembleDebug
+#   3. Replace the APK path in "Install app" if not using the default Gradle output.
+#   4. Create a Maestro flow at .maestro/screenshots.yaml. Example:
+#        appId: com.example.myapp
+#        ---
+#        - launchApp
+#        - takeScreenshot: "screenshots/en-US/phoneScreenshots/01_home"
+#        - tapOn: "Get Started"
+#        - takeScreenshot: "screenshots/en-US/phoneScreenshots/02_onboarding"
+#
+# Screenshot artifacts are exposed individually — pass their URLs to upload_android_screenshots.
+workflows:
+  android-screenshots:
+    name: Android Screenshots
+    max_build_duration: 60
+    instance_type: linux_x2
+    environment:
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your package name
+        AVD_NAME: codemagic_screenshots
+        SYSTEM_IMAGE: system-images;android-33;google_apis;x86_64
+    scripts:
+      - name: Install Maestro
+        script: |
+          curl -Ls "https://get.maestro.mobile.dev" | bash
+          echo "PATH=$HOME/.maestro/bin:$PATH" >> $CM_ENV
+      - name: Create and boot Android emulator
+        script: |
+          sdkmanager --install "$SYSTEM_IMAGE"
+          echo "no" | avdmanager create avd -n "$AVD_NAME" -k "$SYSTEM_IMAGE" --force
+          $ANDROID_SDK_ROOT/emulator/emulator -avd "$AVD_NAME" -no-window -no-audio -no-boot-anim &
+          adb wait-for-device shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 3; done'
+      - name: Build debug APK
+        script: |
+          echo "sdk.dir=$ANDROID_SDK_ROOT" > "$CM_BUILD_DIR/local.properties"
+          ./gradlew assembleDebug    # Replace with your build command
+      - name: Install app on emulator
+        script: |
+          APK_PATH=$(find . -name "*.apk" -not -path "*/test*" | head -1)    # Replace path if not Gradle default
+          adb install -r "$APK_PATH"
+      - name: Capture screenshots
+        script: |
+          mkdir -p screenshots
+          maestro test .maestro/screenshots.yaml
+    artifacts:
+      - screenshots/**/*.png
+      - screenshots/**/*.jpg`,
+
+  "flutter-screenshots": `# Flutter Screenshots — capture store screenshots using Flutter golden tests.
+# No simulator or emulator required — renders widgets at exact store dimensions.
+# Works on any instance type; use linux_x2 for cost efficiency.
+#
+# Before triggering:
+#   1. Replace PACKAGE_NAME with your app's package name.
+#   2. Write golden tests that render your screens at store dimensions. Example:
+#
+#      // test/screenshots/store_screenshots_test.dart
+#      void main() {
+#        testWidgets('home screen - IPHONE_65', (tester) async {
+#          await tester.binding.setSurfaceSize(const Size(1284, 2778));
+#          await tester.pumpWidget(const MyApp());
+#          await tester.pumpAndSettle();
+#          await expectLater(
+#            find.byType(MyApp),
+#            matchesGoldenFile('goldens/en-US/IPHONE_65/01_home.png'),
+#          );
+#        });
+#        testWidgets('home screen - phoneScreenshots', (tester) async {
+#          await tester.binding.setSurfaceSize(const Size(1080, 1920));
+#          await tester.pumpWidget(const MyApp());
+#          await tester.pumpAndSettle();
+#          await expectLater(
+#            find.byType(MyApp),
+#            matchesGoldenFile('goldens/en-US/phoneScreenshots/01_home.png'),
+#          );
+#        });
+#      }
+#
+# Screenshot artifacts are exposed individually — pass their URLs to
+# upload_ios_screenshots (IPHONE_65 set) and upload_android_screenshots (phoneScreenshots set).
+workflows:
+  flutter-screenshots:
+    name: Flutter Screenshots
+    max_build_duration: 30
+    instance_type: linux_x2
+    environment:
+      flutter: stable
+      vars:
+        PACKAGE_NAME: com.example.myapp    # Replace with your package name
+    scripts:
+      - name: Get Flutter packages
+        script: |
+          flutter pub get
+      - name: Generate screenshots via golden tests
+        script: |
+          flutter test test/screenshots/ --update-goldens
+    artifacts:
+      - test/screenshots/goldens/**/*.png`,
 };
 
 /**
