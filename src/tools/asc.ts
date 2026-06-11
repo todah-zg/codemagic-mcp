@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup } from "../asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup, getIosStoreListing, setIosStoreListing } from "../asc.js";
 
 export function registerAscTools(server: McpServer): void {
 
@@ -347,6 +347,63 @@ export function registerAscTools(server: McpServer): void {
         text: "Submitted for App Store review. Track progress with get_asc_review_status.",
       }],
     };
-  });  
+  });
+
+  server.registerTool("get_ios_store_listing", {
+    description:
+      "Pull the current App Store listing text for all locales of an app version. " +
+      "Returns app-info fields (name, subtitle, privacy URLs) and version fields " +
+      "(description, keywords, promotional text, support URL, what's new) grouped by locale. " +
+      "Use before set_ios_store_listing to review what is currently live.",
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+    },
+  }, async ({ app_id, version }) => {
+    const listing = await getIosStoreListing(app_id, version);
+    return {
+      content: [{ type: "text", text: JSON.stringify(listing, null, 2) }],
+    };
+  });
+
+  server.registerTool("set_ios_store_listing", {
+    description:
+      "Update App Store listing text for a single locale. " +
+      "Only the fields you provide are changed — omitted fields are left as-is. " +
+      "App-info fields (name, subtitle) apply to all versions of the app. " +
+      "Version fields (description, keywords, whatsNew, etc.) apply to the specified version only. " +
+      "Changes are staged through the asc CLI and validated before being applied.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+      locale: z.string().default("en-US").describe("BCP-47 locale code e.g. en-US, fr-FR"),
+      name: z.string().optional().describe("App name (app-info, max 30 characters)"),
+      subtitle: z.string().optional().describe("App subtitle shown below the name (app-info, max 30 characters)"),
+      privacy_policy_url: z.string().optional().describe("URL to the app's privacy policy (app-info)"),
+      description: z.string().optional().describe("Full app description (version, max 4000 characters)"),
+      keywords: z.string().optional().describe("Comma-separated keywords for App Store search (version, max 100 characters)"),
+      promotional_text: z.string().optional().describe("Promotional text shown above the description (version, max 170 characters)"),
+      marketing_url: z.string().optional().describe("URL to a marketing page for this version (version)"),
+      support_url: z.string().optional().describe("URL to the app's support page (version)"),
+      whats_new: z.string().optional().describe("What's new text for this version (version, max 4000 characters)"),
+    },
+  }, async ({ app_id, version, locale, name, subtitle, privacy_policy_url, description, keywords, promotional_text, marketing_url, support_url, whats_new }) => {
+    const fields = Object.fromEntries(
+      Object.entries({
+        name, subtitle, privacyPolicyUrl: privacy_policy_url,
+        description, keywords, promotionalText: promotional_text,
+        marketingUrl: marketing_url, supportUrl: support_url, whatsNew: whats_new,
+      }).filter(([, v]) => v !== undefined)
+    );
+    if (Object.keys(fields).length === 0) {
+      return { content: [{ type: "text", text: "No fields provided — nothing to update." }] };
+    }
+    await setIosStoreListing(app_id, version, locale, fields);
+    const updated = Object.keys(fields).join(", ");
+    return {
+      content: [{ type: "text", text: `Store listing updated for ${locale}: ${updated}` }],
+    };
+  });
 
 }

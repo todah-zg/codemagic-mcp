@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createWriteStream } from "node:fs";
-import { unlink } from "node:fs/promises";
+import { unlink, mkdir, readdir, readFile, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -416,4 +416,121 @@ export async function createTestFlightGroup(
   const args = ["testflight", "groups", "create", "--app", appId, "--name", name];
   if (internal) args.push("--internal");
   return runAsc<unknown>(args);
+}
+
+// Fields that live in app-info/{locale}.json
+const APP_INFO_FIELDS = new Set(["name", "subtitle", "privacyPolicyUrl", "privacyChoicesUrl", "privacyPolicyText"]);
+// Fields that live in version/{version}/{locale}.json
+const VERSION_FIELDS = new Set(["description", "keywords", "marketingUrl", "promotionalText", "supportUrl", "whatsNew"]);
+
+export interface IosStoreListingLocale {
+  appInfo?: Record<string, string>;
+  version?: Record<string, string>;
+}
+
+export type IosStoreListingFields = Partial<{
+  name: string;
+  subtitle: string;
+  privacyPolicyUrl: string;
+  privacyChoicesUrl: string;
+  privacyPolicyText: string;
+  description: string;
+  keywords: string;
+  marketingUrl: string;
+  promotionalText: string;
+  supportUrl: string;
+  whatsNew: string;
+}>;
+
+/**
+ * Pull all App Store Connect metadata for an app version.
+ * Returns an object keyed by locale code, with app-info and version fields separated.
+ * @param appId - The App Store Connect app ID.
+ * @param version - The version string e.g. "1.2.3".
+ */
+export async function getIosStoreListing(
+  appId: string,
+  version: string,
+): Promise<Record<string, IosStoreListingLocale>> {
+  const tempDir = join(tmpdir(), `asc-metadata-${randomUUID()}`);
+  await mkdir(tempDir, { recursive: true });
+  try {
+    await execFileAsync(
+      "asc",
+      ["metadata", "pull", "--app", appId, "--version", version, "--dir", tempDir],
+      { maxBuffer: EXEC_BUFFER, timeout: CLI_TIMEOUT_MS },
+    );
+    const result: Record<string, IosStoreListingLocale> = {};
+
+    // Read app-info locales — directory may not exist for apps with no localizations yet.
+    const appInfoDir = join(tempDir, "app-info");
+    const appInfoFiles = await readdir(appInfoDir).catch(() => [] as string[]);
+    for (const file of appInfoFiles.filter(f => f.endsWith(".json"))) {
+      const locale = file.slice(0, -5);
+      result[locale] = { ...result[locale], appInfo: JSON.parse(await readFile(join(appInfoDir, file), "utf8")) };
+    }
+
+    // Read version locales.
+    const versionDir = join(tempDir, "version", version);
+    const versionFiles = await readdir(versionDir).catch(() => [] as string[]);
+    for (const file of versionFiles.filter(f => f.endsWith(".json"))) {
+      const locale = file.slice(0, -5);
+      result[locale] = { ...result[locale], version: JSON.parse(await readFile(join(versionDir, file), "utf8")) };
+    }
+
+    return result;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * Update App Store Connect metadata for a single locale.
+ * Only the fields provided are written — omitted fields are left unchanged.
+ * Fields are split across the two canonical files (app-info and version).
+ * @param appId - The App Store Connect app ID.
+ * @param version - The version string e.g. "1.2.3".
+ * @param locale - BCP-47 locale code e.g. "en-US".
+ * @param fields - Fields to update (any subset of app-info and version fields).
+ */
+export async function setIosStoreListing(
+  appId: string,
+  version: string,
+  locale: string,
+  fields: IosStoreListingFields,
+): Promise<void> {
+  const tempDir = join(tmpdir(), `asc-metadata-${randomUUID()}`);
+  try {
+    const appInfoData = Object.fromEntries(
+      Object.entries(fields).filter(([k]) => APP_INFO_FIELDS.has(k)),
+    );
+    const versionData = Object.fromEntries(
+      Object.entries(fields).filter(([k]) => VERSION_FIELDS.has(k)),
+    );
+
+    // Build only the directories and files we actually need.
+    if (Object.keys(appInfoData).length > 0) {
+      const dir = join(tempDir, "app-info");
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, `${locale}.json`), JSON.stringify(appInfoData, null, 2));
+    }
+    if (Object.keys(versionData).length > 0) {
+      const dir = join(tempDir, "version", version);
+      await mkdir(dir, { recursive: true });
+      await writeFile(join(dir, `${locale}.json`), JSON.stringify(versionData, null, 2));
+    }
+
+    await execFileAsync(
+      "asc",
+      ["metadata", "validate", "--dir", tempDir],
+      { maxBuffer: EXEC_BUFFER, timeout: CLI_TIMEOUT_MS },
+    );
+    await execFileAsync(
+      "asc",
+      ["metadata", "apply", "--app", appId, "--version", version, "--dir", tempDir],
+      { maxBuffer: EXEC_BUFFER, timeout: CLI_TIMEOUT_MS },
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
 }

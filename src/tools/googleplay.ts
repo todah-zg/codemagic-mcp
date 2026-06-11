@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
+import { getAndroidStoreListing, setAndroidStoreListing } from "../androidpublisher.js";
 
 export function registerGooglePlayTools(server: McpServer): void {
 
@@ -138,6 +139,51 @@ export function registerGooglePlayTools(server: McpServer): void {
     };
   });
 
+  server.registerTool("get_android_store_listing", {
+    description:
+      "Fetch the current Google Play store listing for a specific language. " +
+      "Returns title, short description, and full description. " +
+      "Use before set_android_store_listing to review existing text.",
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      language: z.string().default("en-US").describe("BCP-47 language tag e.g. en-US, fr-FR"),
+    },
+  }, async ({ package_name, language }) => {
+    const listing = await getAndroidStoreListing(package_name, language);
+    return {
+      content: [{ type: "text", text: JSON.stringify(listing, null, 2) }],
+    };
+  });
 
+  server.registerTool("set_android_store_listing", {
+    description:
+      "Update the Google Play store listing for a specific language. " +
+      "Only the fields you provide are updated — omitted fields are left unchanged. " +
+      "Changes go live immediately on commit; there is no staging step on Google Play.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      language: z.string().default("en-US").describe("BCP-47 language tag e.g. en-US, fr-FR"),
+      title: z.string().optional().describe("App title (max 50 characters)"),
+      short_description: z.string().optional().describe("Short description shown in search results (max 80 characters)"),
+      full_description: z.string().optional().describe("Full description shown on the store listing page (max 4000 characters)"),
+    },
+  }, async ({ package_name, language, title, short_description, full_description }) => {
+    const listing = Object.fromEntries(
+      Object.entries({ title, shortDescription: short_description, fullDescription: full_description })
+        .filter(([, v]) => v !== undefined)
+    );
+    if (Object.keys(listing).length === 0) {
+      return { content: [{ type: "text", text: "No fields provided — nothing to update." }] };
+    }
+    await setAndroidStoreListing(package_name, language, listing);
+    const updated = Object.keys(listing).join(", ");
+    return {
+      content: [{ type: "text", text: `Store listing updated for ${language}: ${updated}` }],
+    };
+  });
 
 }
