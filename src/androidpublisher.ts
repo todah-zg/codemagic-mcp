@@ -2,6 +2,7 @@ import { createSign } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 const PUBLISHER_BASE = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications";
+const UPLOAD_BASE = "https://androidpublisher.googleapis.com/upload/androidpublisher/v3/applications";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const SCOPE = "https://www.googleapis.com/auth/androidpublisher";
 
@@ -195,6 +196,60 @@ export async function setAndroidStoreListing(
     if (!response.ok) {
       const text = await response.text();
       throw new Error(`updateListing failed (${response.status}): ${text.slice(0, 200)}`);
+    }
+  });
+}
+
+/**
+ * Upload screenshots to Google Play for a specific language and image type.
+ * All uploads are batched inside a single edit — either everything commits or nothing does.
+ * @param packageName - Android package name.
+ * @param language - BCP-47 language tag (e.g. "en-US").
+ * @param imageType - Image type e.g. "phoneScreenshots", "sevenInchScreenshots", "tenInchScreenshots".
+ * @param screenshotUrls - URLs of screenshot images to upload (max 8 for phones).
+ * @param replace - If true, delete all existing images of this type before uploading.
+ */
+export async function uploadAndroidScreenshots(
+  packageName: string,
+  language: string,
+  imageType: string,
+  screenshotUrls: string[],
+  replace: boolean,
+): Promise<void> {
+  await withEdit(packageName, async (token, editId) => {
+    if (replace) {
+      const del = await fetch(
+        `${PUBLISHER_BASE}/${packageName}/edits/${editId}/listings/${language}/images/${imageType}`,
+        { method: "DELETE", headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(10_000) }
+      );
+      // 204 = deleted, 404 = nothing to delete — both are fine
+      if (!del.ok && del.status !== 404) {
+        const text = await del.text();
+        throw new Error(`deleteImages failed (${del.status}): ${text.slice(0, 200)}`);
+      }
+    }
+
+    for (let i = 0; i < screenshotUrls.length; i++) {
+      const url = screenshotUrls[i];
+      const imgResponse = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+      if (!imgResponse.ok) throw new Error(`Failed to download screenshot ${i + 1}: HTTP ${imgResponse.status}`);
+      const contentType = imgResponse.headers.get("content-type") ?? "";
+      const mimeType = contentType.startsWith("image/") ? contentType.split(";")[0] : "image/png";
+      const imageData = await imgResponse.arrayBuffer();
+
+      const upload = await fetch(
+        `${UPLOAD_BASE}/${packageName}/edits/${editId}/listings/${language}/images/${imageType}?uploadType=media`,
+        {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": mimeType },
+          body: imageData,
+          signal: AbortSignal.timeout(60_000),
+        }
+      );
+      if (!upload.ok) {
+        const text = await upload.text();
+        throw new Error(`uploadImage ${i + 1} failed (${upload.status}): ${text.slice(0, 200)}`);
+      }
     }
   });
 }

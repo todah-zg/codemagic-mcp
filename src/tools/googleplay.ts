@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
-import { getAndroidStoreListing, setAndroidStoreListing } from "../androidpublisher.js";
+import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots } from "../androidpublisher.js";
 
 export function registerGooglePlayTools(server: McpServer): void {
 
@@ -183,6 +183,28 @@ export function registerGooglePlayTools(server: McpServer): void {
     const updated = Object.keys(listing).join(", ");
     return {
       content: [{ type: "text", text: `Store listing updated for ${language}: ${updated}` }],
+    };
+  });
+
+  server.registerTool("upload_android_screenshots", {
+    description:
+      "Download screenshot images from URLs and upload them to Google Play for a specific language and device type. " +
+      "Google allows up to 8 screenshots per device type. Supported formats: JPEG and 24-bit PNG (no alpha). Max 8 MB per file. " +
+      "Common image types: phoneScreenshots, sevenInchScreenshots, tenInchScreenshots, tvScreenshots, wearScreenshots. " +
+      "Set replace=true to delete all existing screenshots of this type before uploading (recommended when refreshing a set). " +
+      "All uploads are committed atomically — if any upload fails, no changes go live.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      language: z.string().default("en-US").describe("BCP-47 language tag e.g. en-US, fr-FR"),
+      image_type: z.string().default("phoneScreenshots").describe("Image type: phoneScreenshots, sevenInchScreenshots, tenInchScreenshots, tvScreenshots, wearScreenshots"),
+      screenshot_urls: z.array(z.string()).min(1).max(8).describe("URLs of screenshot images to upload, in display order"),
+      replace: z.boolean().default(false).describe("If true, delete all existing screenshots of this type before uploading"),
+    },
+  }, async ({ package_name, language, image_type, screenshot_urls, replace }) => {
+    await uploadAndroidScreenshots(package_name, language, image_type, screenshot_urls, replace);
+    return {
+      content: [{ type: "text", text: `Uploaded ${screenshot_urls.length} screenshot(s) for ${image_type} / ${language}.` }],
     };
   });
 

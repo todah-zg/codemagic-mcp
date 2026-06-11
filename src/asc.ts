@@ -534,3 +534,89 @@ export async function setIosStoreListing(
     await rm(tempDir, { recursive: true, force: true });
   }
 }
+
+// ---------------------------------------------------------------------------
+// Screenshots
+// ---------------------------------------------------------------------------
+
+const SCREENSHOT_UPLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * Download a single screenshot URL to a directory.
+ * Extension is inferred from the URL path first, then the Content-Type header.
+ * Files are named screenshot_00.png, screenshot_01.jpg, etc.
+ */
+async function downloadScreenshot(url: string, destDir: string, index: number): Promise<void> {
+  const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+  if (!response.ok) throw new Error(`Failed to download screenshot ${index + 1}: HTTP ${response.status}`);
+  const urlPath = new URL(url).pathname;
+  const extMatch = urlPath.match(/\.(png|jpe?g)$/i);
+  const contentType = response.headers.get("content-type") ?? "";
+  const ext = extMatch ? extMatch[1].toLowerCase().replace("jpeg", "jpg") : contentType.includes("png") ? "png" : "jpg";
+  const destPath = join(destDir, `screenshot_${String(index).padStart(2, "0")}.${ext}`);
+  await writeFile(destPath, Buffer.from(await response.arrayBuffer()));
+}
+
+export interface IosScreenshotType {
+  deviceType: string;
+  dimensions: { width: number; height: number }[];
+}
+
+/**
+ * List the screenshot device types and their required pixel dimensions.
+ * By default returns the two most-required types (IPHONE_65 and IPAD_PRO_3GEN_129).
+ * Pass all=true to get the full matrix.
+ * @param all - If true, return all supported device types instead of just the common ones.
+ */
+export async function listIosScreenshotTypes(all = false): Promise<IosScreenshotType[]> {
+  const args = ["screenshots", "sizes"];
+  if (all) args.push("--all");
+  const result = await runAsc<{ sizes: { displayType: string; dimensions: { width: number; height: number }[] }[] }>(args);
+  return result.sizes.map(s => ({
+    deviceType: s.displayType.replace(/^APP_/, ""),
+    dimensions: s.dimensions,
+  }));
+}
+
+/**
+ * Download screenshots from URLs and upload them to App Store Connect for a
+ * specific device type and locale.
+ * Downloads run in parallel; upload uses the asc CLI fan-out mode (locale subdir).
+ * @param appId - The App Store Connect app ID.
+ * @param version - The version string e.g. "1.2.3".
+ * @param locale - BCP-47 locale code e.g. "en-US".
+ * @param deviceType - Device type string e.g. "IPHONE_65" (from list_ios_screenshot_types).
+ * @param screenshotUrls - URLs of screenshot images to upload (max 10).
+ * @param replace - If true, delete existing screenshots for this device type before uploading.
+ */
+export async function uploadIosScreenshots(
+  appId: string,
+  version: string,
+  locale: string,
+  deviceType: string,
+  screenshotUrls: string[],
+  replace = false,
+): Promise<unknown> {
+  const tempDir = join(tmpdir(), `asc-screenshots-${randomUUID()}`);
+  const localeDir = join(tempDir, locale);
+  await mkdir(localeDir, { recursive: true });
+  try {
+    await Promise.all(screenshotUrls.map((url, i) => downloadScreenshot(url, localeDir, i)));
+    const args = [
+      "screenshots", "upload",
+      "--app", appId,
+      "--version", version,
+      "--path", tempDir,
+      "--device-type", deviceType,
+      "--output", "json",
+    ];
+    if (replace) args.push("--replace");
+    const { stdout } = await execFileAsync("asc", args, {
+      maxBuffer: EXEC_BUFFER,
+      timeout: SCREENSHOT_UPLOAD_TIMEOUT_MS,
+    });
+    return JSON.parse(stdout);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+}

@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup, getIosStoreListing, setIosStoreListing } from "../asc.js";
+import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup, getIosStoreListing, setIosStoreListing, listIosScreenshotTypes, uploadIosScreenshots } from "../asc.js";
 
 export function registerAscTools(server: McpServer): void {
 
@@ -403,6 +403,44 @@ export function registerAscTools(server: McpServer): void {
     const updated = Object.keys(fields).join(", ");
     return {
       content: [{ type: "text", text: `Store listing updated for ${locale}: ${updated}` }],
+    };
+  });
+
+  server.registerTool("list_ios_screenshot_types", {
+    description:
+      "List the supported screenshot device types for the App Store and their required pixel dimensions. " +
+      "By default returns the two most-required types: IPHONE_65 and IPAD_PRO_3GEN_129. " +
+      "Pass all=true to get the full matrix of all supported device types. " +
+      "Use the deviceType values returned here as the device_type parameter for upload_ios_screenshots.",
+    inputSchema: {
+      all: z.boolean().default(false).describe("If true, return all supported device types instead of just the common ones"),
+    },
+  }, async ({ all }) => {
+    const types = await listIosScreenshotTypes(all);
+    return {
+      content: [{ type: "text", text: JSON.stringify(types, null, 2) }],
+    };
+  });
+
+  server.registerTool("upload_ios_screenshots", {
+    description:
+      "Download screenshot images from URLs and upload them to App Store Connect for a specific device type and locale. " +
+      "Apple allows up to 10 screenshots per set. Supported formats: PNG (no alpha) and JPEG. Max 10 MB per file. " +
+      "Call list_ios_screenshot_types first to get valid device_type values and required dimensions. " +
+      "Set replace=true to delete existing screenshots before uploading (recommended when refreshing a set).",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
+      version: z.string().describe("App Store version string e.g. '1.2.3'"),
+      locale: z.string().default("en-US").describe("BCP-47 locale code e.g. en-US, fr-FR"),
+      device_type: z.string().describe("Device type string e.g. IPHONE_65, IPAD_PRO_3GEN_129 (from list_ios_screenshot_types)"),
+      screenshot_urls: z.array(z.string()).min(1).max(10).describe("URLs of screenshot images to upload, in display order"),
+      replace: z.boolean().default(false).describe("If true, delete all existing screenshots for this device type before uploading"),
+    },
+  }, async ({ app_id, version, locale, device_type, screenshot_urls, replace }) => {
+    const result = await uploadIosScreenshots(app_id, version, locale, device_type, screenshot_urls, replace);
+    return {
+      content: [{ type: "text", text: `Uploaded ${screenshot_urls.length} screenshot(s) for ${device_type} / ${locale}.\n${JSON.stringify(result, null, 2)}` }],
     };
   });
 
