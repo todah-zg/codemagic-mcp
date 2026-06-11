@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, createVariableGroup, addVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -251,6 +251,23 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     };
   });
 
+  server.registerTool("list_variables", {
+    description: "List variables in a Codemagic variable group. Returns variable IDs, names, and values. Secret variable values are returned as null — only non-secret values are visible. Use the variable IDs with update_variable and delete_variable.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      group_id: z.string().describe("The variable group ID (from list_variable_groups)"),
+    },
+  }, async ({ group_id }) => {
+    const variables = await listVariables(apiToken, group_id);
+    if (!variables.length) return {
+      content: [{ type: "text", text: "No variables found in this group." }],
+    };
+    const text = variables.map(v =>
+      `${v.name} = ${v.secure ? "(secret)" : v.value ?? "(empty)"}  [id: ${v.id}]`
+    ).join("\n");
+    return { content: [{ type: "text", text }] };
+  });
+
   server.registerTool("create_variable_group", {
     description: "Create a new variable group in Codemagic. Requires a team_id (personal accounts do not support global variable groups) or an app_id for app-level groups. After creating, add non-secret variables via add_variable, or add secret values directly in the Codemagic UI.",
     annotations: {
@@ -293,6 +310,42 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     };
   });
 
+  server.registerTool("update_variable", {
+    description: "Update the name or value of an existing non-secret variable in a Codemagic variable group. The variable_id comes from list_variable_groups. For secret values use the Codemagic UI — secrets should never pass through the agent.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: false,
+    },
+    inputSchema: {
+      group_id: z.string().describe("The variable group ID"),
+      variable_id: z.string().describe("The variable ID to update (from list_variable_groups)"),
+      name: z.string().describe("New variable name"),
+      value: z.string().describe("New variable value"),
+    },
+  }, async ({ group_id, variable_id, name, value }) => {
+    await updateVariable(apiToken, group_id, variable_id, name, value);
+    return {
+      content: [{ type: "text", text: `Variable ${variable_id} updated.` }],
+    };
+  });
+
+  server.registerTool("delete_variable", {
+    description: "Delete a variable from a Codemagic variable group. The variable_id comes from list_variable_groups. This cannot be undone.",
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true,
+    },
+    inputSchema: {
+      group_id: z.string().describe("The variable group ID"),
+      variable_id: z.string().describe("The variable ID to delete (from list_variable_groups)"),
+    },
+  }, async ({ group_id, variable_id }) => {
+    await deleteVariable(apiToken, group_id, variable_id);
+    return {
+      content: [{ type: "text", text: `Variable ${variable_id} deleted.` }],
+    };
+  });
+
   server.registerTool("get_webhook_url", {
     description: "Get the incoming webhook URL for a Codemagic app. Paste this URL into your Git provider (GitHub, GitLab, or Bitbucket) repository settings to trigger builds automatically on push or pull request events.",
     annotations: { readOnlyHint: true },
@@ -330,6 +383,38 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
   }, async ({ app_id, webhook_id }) => {
     await deleteWebhook(apiToken, app_id, webhook_id);
     return { content: [{ type: "text", text: `Webhook ${webhook_id} deleted.` }] };
+  });
+
+  server.registerTool("list_caches", {
+    description: "List build caches for a Codemagic app. Each cache is scoped to a workflow. Use the cache IDs with delete_cache to free up storage or force a clean build.",
+    annotations: { readOnlyHint: true },
+    inputSchema: {
+      app_id: z.string().describe("The Codemagic app ID"),
+    },
+  }, async ({ app_id }) => {
+    const caches = await listCaches(apiToken, app_id);
+    if (!caches.length) return {
+      content: [{ type: "text", text: "No caches found for this app." }],
+    };
+    const text = caches.map(c =>
+      `${c.workflowId} — ${(c.size / 1024 / 1024).toFixed(1)} MB, last used ${c.lastUsed}  [id: ${c.id}]`
+    ).join("\n");
+    return { content: [{ type: "text", text }] };
+  });
+  
+  server.registerTool("delete_cache", {
+    description: "Delete a build cache for a Codemagic app. If cache_id is provided, deletes that specific workflow cache. If omitted, deletes all caches for the app. Deletion is asynchronous — the API returns immediately and completes in the background.",
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    inputSchema: {
+      app_id: z.string().describe("The Codemagic app ID"),
+      cache_id: z.string().optional().describe("Specific cache ID to delete (from list_caches). If omitted, all caches are deleted."),
+    },
+  }, async ({ app_id, cache_id }) => {
+    const deleted = await deleteCache(apiToken, app_id, cache_id);
+    const target = cache_id ? `cache ${cache_id}` : `all caches`;
+    return {
+      content: [{ type: "text", text: `Deletion started for ${target}. IDs queued: ${deleted.join(", ")}` }],
+    };
   });
 
   server.registerTool("get_build_logs", {

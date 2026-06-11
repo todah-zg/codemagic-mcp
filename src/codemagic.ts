@@ -287,6 +287,13 @@ export interface VariableGroup {
   name: string;
 }
 
+export interface Variable {
+  id: string;
+  name: string;
+  value: string | null;
+  secure: boolean;
+}
+
 /**
  * List variable groups for a team or app.
  * Secret variable values are not returned by the API — manage them in the Codemagic UI.
@@ -308,6 +315,23 @@ export async function listVariableGroups(
   });
   if (!response.ok) throw await buildApiError(response);
   const data = await response.json() as { data: VariableGroup[] };
+  return data.data;
+}
+
+/**
+ * List variables in a variable group.
+ * Secret variable values are returned as null — only non-secret values are visible.
+ * The returned variable IDs are required for update_variable and delete_variable.
+ * @param apiToken - Codemagic API token.
+ * @param groupId - The variable group ID.
+ */
+export async function listVariables(apiToken: string, groupId: string): Promise<Variable[]> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, {
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  const data = await response.json() as { data: Variable[] };
   return data.data;
 }
 
@@ -375,6 +399,96 @@ export async function addVariable(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
+}
+
+/**
+ * Update an existing variable in a variable group.
+ * Only non-secure variables should be updated via the agent — manage secret
+ * values directly in the Codemagic UI.
+ * @param apiToken - Codemagic API token.
+ * @param groupId - The variable group ID.
+ * @param variableId - The variable ID to update (from list_variable_groups).
+ * @param name - New variable name.
+ * @param value - New variable value.
+ */
+export async function updateVariable(
+  apiToken: string,
+  groupId: string,
+  variableId: string,
+  name: string,
+  value: string
+): Promise<void> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables/${variableId}`, {
+    method: "PATCH",
+    headers: { "x-auth-token": apiToken, "Content-Type": "application/json" },
+    body: JSON.stringify({ name, value, secure: false }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+}
+
+/**
+ * Delete a variable from a variable group.
+ * @param apiToken - Codemagic API token.
+ * @param groupId - The variable group ID.
+ * @param variableId - The variable ID to delete (from list_variable_groups).
+ */
+export async function deleteVariable(
+  apiToken: string,
+  groupId: string,
+  variableId: string
+): Promise<void> {
+  const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables/${variableId}`, {
+    method: "DELETE",
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+}
+
+export interface Cache {
+  id: string;
+  workflowId: string;
+  lastUsed: string;
+  size: number;
+}
+
+/**
+ * List all build caches for an application.
+ * Uses the v1 API — not in the v3 OpenAPI schema.
+ * @param apiToken - Codemagic API token.
+ * @param appId - The Codemagic app ID.
+ */
+export async function listCaches(apiToken: string, appId: string): Promise<Cache[]> {
+  const response = await fetch(`${BASE_URL_V1}/apps/${appId}/caches`, {
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  const data = await response.json() as { caches: Array<{ _id: string; workflowId: string; lastUsed: string; size: number }> };
+  return data.caches.map(c => ({ id: c._id, workflowId: c.workflowId, lastUsed: c.lastUsed, size: c.size }));
+}
+
+/**
+ * Delete one or all build caches for an application. Deletion is async — the
+ * API returns 202 Accepted and completes in the background.
+ * Uses the v1 API — not in the v3 OpenAPI schema.
+ * @param apiToken - Codemagic API token.
+ * @param appId - The Codemagic app ID.
+ * @param cacheId - Specific cache ID to delete. If omitted, all caches are deleted.
+ */
+export async function deleteCache(apiToken: string, appId: string, cacheId?: string): Promise<string[]> {
+  const url = cacheId
+    ? `${BASE_URL_V1}/apps/${appId}/caches/${cacheId}`
+    : `${BASE_URL_V1}/apps/${appId}/caches`;
+  const response = await fetch(url, {
+    method: "DELETE",
+    headers: { "x-auth-token": apiToken },
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+  if (!response.ok) throw await buildApiError(response);
+  const data = await response.json() as { caches: string[] };
+  return data.caches;
 }
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────

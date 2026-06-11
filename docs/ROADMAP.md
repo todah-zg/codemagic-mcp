@@ -88,9 +88,9 @@ Gaps identified via competitive analysis (June 2026):
 | `get_user` / `list_teams` | ✓ complete | The agent can't discover which teams the token belongs to — `list_builds` requires a `team_id` that must be known in advance. `list_teams` solves the discovery problem. |
 | `get_build_logs` | ✓ complete | Fetch per-step log text via v1 API (`api.codemagic.io/builds/{id}/step/{step_id}`). |
 | Instance type on `trigger_build` | ✓ complete | `instance_type` parameter added. Confirmed via v1 API test — `instanceType` in the trigger payload overrides the YAML setting. |
-| `update_variable` / `delete_variable` | Low | CRUD completeness for variable management |
-| `list_caches` / `delete_caches` | Low | Useful when debugging slow builds or storage exhaustion |
-| `create_public_artifact_url` | Low | Share IPA/AAB links externally without requiring Codemagic auth |
+| `update_variable` / `delete_variable` | ✓ complete | CRUD completeness for variable management. |
+| `list_caches` / `delete_cache` | ✓ complete | Available via v1 API (`/apps/{id}/caches`). `delete_cache` accepts an optional `cache_id` — omit to delete all. |
+| `create_public_artifact_url` | Not possible | No public artifact URL endpoint in the v3 API. |
 
 ### Rethinking build status polling
 
