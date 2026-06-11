@@ -217,7 +217,7 @@ export function registerGooglePlayTools(server: McpServer): void {
       "Reviews are ordered by last modified date, most recent first.",
     inputSchema: {
       package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
-      max_results: z.number().int().min(1).max(500).default(50).describe("Maximum number of reviews to return (1–500, default 50). Pages of 100 are fetched transparently until the limit is reached."),
+      max_results: z.number().int().min(1).default(50).describe("Maximum number of reviews to return (default 50). Pages of 100 are fetched transparently until the limit is reached."),
       max_star_rating: z.number().int().min(1).max(5).optional().describe("Filter to reviews at or below this star rating — e.g. 2 returns only 1 and 2 star reviews"),
       translation_language: z.string().optional().describe("BCP-47 language code to translate review text into (e.g. en-US). Useful for apps with non-English reviews."),
     },

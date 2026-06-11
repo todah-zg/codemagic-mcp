@@ -308,7 +308,7 @@ export interface Review {
  * Only reviews that contain text are returned (ratings without comments are excluded by the API).
  * Fetches pages of 100 until maxResults is reached or no more pages exist.
  * @param packageName - Android package name.
- * @param maxResults - Maximum reviews to fetch (1–500, default 50).
+ * @param maxResults - Maximum reviews to fetch (default 50, no upper limit beyond API rate limits).
  * @param translationLanguage - BCP-47 language to translate review text into (optional).
  */
 export async function listGooglePlayReviews(
