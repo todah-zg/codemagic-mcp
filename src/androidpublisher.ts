@@ -253,3 +253,28 @@ export async function uploadAndroidScreenshots(
     }
   });
 }
+
+/**
+ * Submit the data safety declaration for a Google Play app.
+ * Operates outside the edit lifecycle — takes effect immediately on success.
+ * The CSV can be exported from Play Console → App content → Data safety → Export CSV,
+ * then re-uploaded here when data practices change. There is no GET endpoint.
+ * @param packageName - Android package name.
+ * @param csv - Raw CSV string exported from the Play Console data safety form.
+ */
+export async function setAndroidDataSafety(packageName: string, csv: string): Promise<void> {
+  const token = await getAccessToken();
+  const response = await fetch(
+    `${PUBLISHER_BASE}/${packageName}/dataSafety`,
+    {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ safetyLabels: csv }),
+      signal: AbortSignal.timeout(10_000),
+    }
+  );
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`setDataSafety failed (${response.status}): ${text.slice(0, 200)}`);
+  }
+}

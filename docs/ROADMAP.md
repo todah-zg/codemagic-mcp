@@ -10,7 +10,7 @@ crossing it.
 
 ---
 
-## Where we are (Phase 3 — in progress)
+## Where we are (Phase 3 — complete)
 
 **Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
@@ -29,16 +29,17 @@ release note validation, and full Codemagic API coverage. iOS adds: `upload_buil
 redesigned as single-check. Cross-store adds: `prepare_release_notes`. Both
 `/ios_release` and `/android_release` prompts updated end-to-end.
 
-**Phase 3 (partial):** Store listings and screenshots. iOS adds: `get_ios_store_listing`,
+**Phase 3:** Store listings, screenshots, and data safety. iOS adds: `get_ios_store_listing`,
 `set_ios_store_listing`, `list_ios_screenshot_types`, `upload_ios_screenshots`. Android
-adds: `get_android_store_listing`, `set_android_store_listing`, `upload_android_screenshots`
-via a new `androidpublisher.ts` direct API client (google-play CLI has no listing or image
-support). New `codemagic.yaml` templates: `ios-screenshots` (Maestro + iOS simulator),
-`android-screenshots` (Maestro + Android emulator on Linux), `flutter-screenshots`
-(Flutter golden tests, no emulator). Total: 64 tools, 18 templates.
+adds: `get_android_store_listing`, `set_android_store_listing`, `upload_android_screenshots`,
+`set_android_data_safety` via a new `androidpublisher.ts` direct API client (google-play
+CLI has no listing, image, or data safety support). New `codemagic.yaml` templates:
+`ios-screenshots` (Maestro + iOS simulator), `android-screenshots` (Maestro + Android
+emulator on Linux), `flutter-screenshots` (Flutter golden tests, no emulator).
+Total: 65 tools, 18 templates.
 
-What we can NOT do today: Android data safety form, first-publish guidance (app record
-creation, privacy labels, compliance forms are UI-only on both stores).
+What we can NOT do today: first-publish guidance (app record creation, privacy labels,
+compliance forms are UI-only on both stores).
 
 ---
 
@@ -153,9 +154,11 @@ Apple's processing time (10–30 min) is now handled by the agent polling `list_
 - **Caption/frame pipeline** — deferred. `asc screenshots frame` is experimental;
   store policy requires screenshots to reflect the real app. Deferred until the
   experimental commands stabilise.
-- **Data safety form (Android)** — `applications.dataSafety` accepts the CSV
-  declaration via API; one of the few compliance forms that IS automatable. Not yet
-  implemented.
+- ✓ **Data safety form (Android)** — `POST applications/{packageName}/dataSafety` accepts
+  the CSV declaration as a string in a JSON body. Operates outside the edit lifecycle
+  (direct POST, takes effect immediately). No GET endpoint exists — the CSV is exported
+  once from Play Console and re-uploaded when data practices change. Tool:
+  `set_android_data_safety`.
 
 ---
 

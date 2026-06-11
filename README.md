@@ -252,6 +252,7 @@ You can also describe what you want in plain language — Claude will select the
 | `get_android_store_listing` | Fetch current Google Play store listing for a language (title, descriptions) |
 | `set_android_store_listing` | Update Google Play store listing for a language — only provided fields are changed |
 | `upload_android_screenshots` | Download screenshots from URLs and upload to Google Play for a language and device type |
+| `set_android_data_safety` | Submit the data safety declaration CSV (exported from Play Console) — re-upload when data practices change |
 
 ### Cross-store
 

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
-import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots } from "../androidpublisher.js";
+import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots, setAndroidDataSafety } from "../androidpublisher.js";
 
 export function registerGooglePlayTools(server: McpServer): void {
 
@@ -205,6 +205,25 @@ export function registerGooglePlayTools(server: McpServer): void {
     await uploadAndroidScreenshots(package_name, language, image_type, screenshot_urls, replace);
     return {
       content: [{ type: "text", text: `Uploaded ${screenshot_urls.length} screenshot(s) for ${image_type} / ${language}.` }],
+    };
+  });
+
+  server.registerTool("set_android_data_safety", {
+    description:
+      "Submit the data safety declaration for a Google Play app. " +
+      "The declaration describes what data the app collects, how it is used, and whether it is shared. " +
+      "Accepts the raw CSV exported from Play Console → App content → Data safety → Export CSV. " +
+      "Re-upload whenever data practices change (new data type, updated retention policy, etc.). " +
+      "Takes effect immediately — there is no staging step and no GET endpoint to retrieve current labels.",
+    annotations: { readOnlyHint: false, destructiveHint: false },
+    inputSchema: {
+      package_name: z.string().describe("The Android package name e.g. com.example.myapp"),
+      csv: z.string().describe("Raw CSV string from Play Console data safety export (5 columns: question ID, response ID, TRUE/FALSE value, requirement type, human-readable label)"),
+    },
+  }, async ({ package_name, csv }) => {
+    await setAndroidDataSafety(package_name, csv);
+    return {
+      content: [{ type: "text", text: "Data safety declaration submitted successfully." }],
     };
   });
 
