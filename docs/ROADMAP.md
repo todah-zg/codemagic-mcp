@@ -10,7 +10,7 @@ crossing it.
 
 ---
 
-## Where we are (Phase 5 — in progress)
+## Where we are — v1.0 shipped
 
 **Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
@@ -48,9 +48,20 @@ section for items that have no public API. Every item is tagged "agent can fix" 
 "human required" so the agent knows exactly what to do next. Total: 66 tools, 5 prompts,
 18 templates.
 
-What we can NOT do today: reject-and-reply via Resolution Center (UI only on both
-stores); deep export compliance status read-back; screenshot presence check (would
-require a new `asc screenshots list` wrapper).
+**Phase 5 (partial — shipped as v1.0):** Test results and review engagement. New tools:
+`get_test_results` (downloads and parses JUnit XML from Codemagic build artifacts;
+covers Flutter, Android, and iOS via xcresult conversion; no external parser dependency),
+`list_google_play_reviews` (paginated, star-filter, optional translation), and
+`reply_to_google_play_review`. Apple Analytics Reports deferred — complex async
+multi-step flow with low actionability relative to effort (see deferred table). Google
+Play Custom Store Listings dropped — requires 10k+ installs and Play Console experiment
+setup; too niche for v1.0.
+
+**v1.0 totals: 69 tools, 5 prompts, 18 templates, 34 tests.**
+
+What we can NOT do: reject-and-reply via Resolution Center (UI only on both stores);
+Apple Analytics Reports (deferred to v1.1); OTA updates / Shorebird / CodePush
+(Phase 6, segmented audiences).
 
 ---
 
@@ -210,14 +221,14 @@ small and as guided as possible.*
 
 ---
 
-## Phase 5 — Intelligence & engagement layer
+## Phase 5 — Intelligence & engagement layer *(partially shipped in v1.0)*
 
 *Research verdict (June 2026): the build → ship loop is solid. Phase 5 adds the next
-two questions agents naturally ask: "what happened after I shipped?" (analytics, reviews)
+two questions agents naturally ask: "what happened after I shipped?" (reviews)
 and "why did this build fail?" (test results). Plus: engaging with users via review replies
 is one of the clearest "agent saves real time" workflows and both stores have clean APIs.*
 
-### Test results
+### Test results ✓ shipped in v1.0
 
 Codemagic renders JUnit XML test results visually in the build UI but does not expose
 them via the REST API. However, JUnit XML files appear in the build's artifact list, so
@@ -237,7 +248,7 @@ out of scope — it requires persistent cross-build storage which a stateless MC
 cannot provide. An agent can detect a failure in a single build; trend analysis belongs in
 Buildkite Test Engine, Trunk, or similar services.
 
-### User review management
+### User review management ✓ shipped in v1.0
 
 Apple's ASC API does **not** have a POST endpoint for posting new developer replies to App
 Store reviews — that is UI-only. Reading and deleting existing developer responses is
@@ -251,29 +262,24 @@ The agent drafts the reply; the tool posts it.
 | `list_google_play_reviews` | List recent reviews for an app, with optional star-rating filter and pagination. |
 | `reply_to_google_play_review` | Post or update a developer reply to a specific Google Play review. |
 
-### Apple Analytics Reports
+### Apple Analytics Reports — deferred to v1.1
 
 Apple's Analytics Reports API (launched March 2024, ASC API v3.4) exposes 50+ report types
 as bulk downloads — downloads, crashes, subscriptions, engagement. The flow is async:
-request → poll until instances available → download gzipped TSV. Three tools:
+request → poll until instances available → download gzipped TSV.
 
-| Tool | What it does |
-|---|---|
-| `request_analytics_report` | Request generation of a report type for a date range. Returns a request ID. |
-| `list_analytics_report_instances` | Poll for available instances of a requested report. |
-| `download_analytics_report` | Download a specific report instance, decompress, and return structured data. |
+Deferred because: (1) the 3-tool async flow adds friction disproportionate to the value —
+analytics is informational, not actionable in the release pipeline; (2) developers who care
+about analytics already have tools (ASC web dashboard, third-party platforms); (3) the
+correct implementation requires direct ASC REST API calls with ES256 JWT auth, introducing
+a second auth mechanism into `asc.ts` alongside the existing CLI pattern. Worth revisiting
+as a standalone addition once the v1.0 surface is validated.
 
-### Google Play Custom Store Listings
+### Google Play Custom Store Listings — dropped
 
-Up to 50 custom store listings per app (100 for Play partners), each targetable by search
-keyword, country, or UTM source. Same androidpublisher edit/commit pattern as existing
-listing tools.
-
-| Tool | What it does |
-|---|---|
-| `list_google_play_custom_listings` | List all custom store listings configured for an app. |
-| `get_google_play_custom_listing` | Fetch a specific custom listing by listing ID. |
-| `set_google_play_custom_listing` | Create or update a custom store listing (title, short/full description, targeting). |
+Requires 10,000+ installs and a Custom Store Listing experiment set up in Play Console
+first. Too niche for v1.0 — affects a small fraction of the developer base and provides
+no value until the app already has significant traction.
 
 ---
 
@@ -343,9 +349,10 @@ The local (stdio) version benefits too: a read-only token naturally produces a s
 | Maestro / E2E in cloud | Defer to yaml | Runs as script steps on Codemagic VMs already. |
 | In-app purchases / subscriptions | Later | Full API + asc CLI support exists, but it is a deep domain; revisit on demand. |
 | iOS App Store review replies | Not possible | ASC API has no POST for developer replies — UI-only. Reading/deleting existing replies is possible but low value. |
-| Google Play review replies | Phase 5 | Moving to Phase 5 — clean REST API, high value. |
-| Apple Analytics Reports | Phase 5 | Moving to Phase 5 — ASC API v3.4 (March 2024), 50+ report types. |
-| OTA updates (Shorebird / CodePush) | Phase 6 | Segmented audiences (Flutter vs React Native); both need separate CLIs and credentials. Deferred until Phase 5 is stable. |
+| Google Play review replies | ✓ v1.0 | Shipped: `list_google_play_reviews` + `reply_to_google_play_review`. |
+| Apple Analytics Reports | v1.1 | Async multi-step flow (request → poll → download gzip TSV); informational rather than actionable. Requires direct ASC REST API calls alongside existing CLI pattern. Revisit post-launch. |
+| Google Play Custom Store Listings | Dropped | Requires 10k+ installs and Play Console experiment setup — too niche for v1.0. |
+| OTA updates (Shorebird / CodePush) | Phase 6 | Segmented audiences (Flutter vs React Native); both need separate CLIs and credentials. |
 | In-app purchases / subscriptions | Later | Full API + asc CLI support exists, but it is a deep domain that shifts product identity from CI/CD to monetization manager. |
 | App size monitoring | Later (external) | Emerge Tools / Sentry have APIs; only useful if the team already uses one of those services. |
 | Diawi, Appetize.io | Skip / park | Superseded by TestFlight + internal app sharing; Appetize's browser-preview is interesting for demos but unverified. |

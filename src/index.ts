@@ -12,10 +12,9 @@ import { registerReadinessTools } from "./tools/readiness.js";
 import { registerTestingTools } from "./tools/testing.js";
 
 // Validate required credentials
-const apiToken = process.env.CODEMAGIC_API_TOKEN;
+const apiToken = process.env.CODEMAGIC_API_TOKEN ?? "";
 if (!apiToken) {
-  console.error("Error: CODEMAGIC_API_TOKEN environment variable is not set.");
-  process.exit(1);
+  console.error("Warning: CODEMAGIC_API_TOKEN is not set. Codemagic tools will fail when called.");
 }
 
 // ASC credentials — optional, but warn if partial
