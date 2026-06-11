@@ -10,7 +10,7 @@ crossing it.
 
 ---
 
-## Where we are (Phase 4 — complete)
+## Where we are (Phase 5 — in progress)
 
 **Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
@@ -210,7 +210,110 @@ small and as guided as possible.*
 
 ---
 
-## Phase 5 — Hosted by Codemagic
+## Phase 5 — Intelligence & engagement layer
+
+*Research verdict (June 2026): the build → ship loop is solid. Phase 5 adds the next
+two questions agents naturally ask: "what happened after I shipped?" (analytics, reviews)
+and "why did this build fail?" (test results). Plus: engaging with users via review replies
+is one of the clearest "agent saves real time" workflows and both stores have clean APIs.*
+
+### Test results
+
+Codemagic renders JUnit XML test results visually in the build UI but does not expose
+them via the REST API. However, JUnit XML files appear in the build's artifact list, so
+the MCP server can download and parse them directly.
+
+Every mobile platform emits JUnit XML:
+- **Flutter**: `flutter test --machine` → Codemagic converts to JUnit XML
+- **Android**: `build/app/outputs/androidTest-results/connected/*.xml`
+- **iOS**: `codemagic-cli-tools xcode-project junit-test-results` converts `.xcresult`
+
+| Tool | What it does |
+|---|---|
+| `get_test_results` | Takes a `build_id`. Finds JUnit XML in the build's artifact list by heuristic filename matching, downloads and parses it, returns structured pass/fail/duration/error data. |
+
+Flaky test tracking (detecting a test that fails intermittently across builds) is explicitly
+out of scope — it requires persistent cross-build storage which a stateless MCP server
+cannot provide. An agent can detect a failure in a single build; trend analysis belongs in
+Buildkite Test Engine, Trunk, or similar services.
+
+### User review management
+
+Apple's ASC API does **not** have a POST endpoint for posting new developer replies to App
+Store reviews — that is UI-only. Reading and deleting existing developer responses is
+possible but low value.
+
+Google Play's Reviews API is fully featured: list, read individual, and reply (≤350 chars).
+The agent drafts the reply; the tool posts it.
+
+| Tool | What it does |
+|---|---|
+| `list_google_play_reviews` | List recent reviews for an app, with optional star-rating filter and pagination. |
+| `reply_to_google_play_review` | Post or update a developer reply to a specific Google Play review. |
+
+### Apple Analytics Reports
+
+Apple's Analytics Reports API (launched March 2024, ASC API v3.4) exposes 50+ report types
+as bulk downloads — downloads, crashes, subscriptions, engagement. The flow is async:
+request → poll until instances available → download gzipped TSV. Three tools:
+
+| Tool | What it does |
+|---|---|
+| `request_analytics_report` | Request generation of a report type for a date range. Returns a request ID. |
+| `list_analytics_report_instances` | Poll for available instances of a requested report. |
+| `download_analytics_report` | Download a specific report instance, decompress, and return structured data. |
+
+### Google Play Custom Store Listings
+
+Up to 50 custom store listings per app (100 for Play partners), each targetable by search
+keyword, country, or UTM source. Same androidpublisher edit/commit pattern as existing
+listing tools.
+
+| Tool | What it does |
+|---|---|
+| `list_google_play_custom_listings` | List all custom store listings configured for an app. |
+| `get_google_play_custom_listing` | Fetch a specific custom listing by listing ID. |
+| `set_google_play_custom_listing` | Create or update a custom store listing (title, short/full description, targeting). |
+
+---
+
+## Phase 6 — OTA updates
+
+*Deferred until next major version. Both platforms have well-defined CLI+API paths but
+the user base is segmented: Shorebird is Flutter-only, CodePush/App Center is React
+Native-only. Neither is universally applicable, and both require the developer to have
+already set up the OTA service. Building these well means two new subprocess-based
+module pairs (shorebird.ts / tools/shorebird.ts, codepush.ts / tools/codepush.ts) and
+two new env vars.*
+
+**Note on Codemagic's OTA API endpoints:** The `/api/v3/ota/` endpoints in Codemagic's
+v3 API refer to Codemagic's own React Native CodePush product, not Shorebird. Shorebird
+integration would use the `shorebird` CLI with `SHOREBIRD_TOKEN` auth — it is not
+surfaced through the Codemagic API.
+
+### Shorebird (Flutter)
+
+| Tool | Wraps | Why |
+|---|---|---|
+| `list_shorebird_releases` | `shorebird releases list --json` | Discover which releases have patches; find the right release version before patching |
+| `create_shorebird_patch` | `shorebird patch android/ios` | Build and upload a Dart-only patch against an existing release — no store review, users get the fix in seconds |
+| `rollback_shorebird_patch` | `shorebird patch rollback` | Revert a bad patch before it reaches more users |
+
+Constraint: patches can **only** change Dart code. Any native code change (new plugin,
+`build.gradle`, `Info.plist`, asset changes) requires a full store release via the
+existing `ios_release` / `android_release` flow.
+
+### CodePush (React Native)
+
+| Tool | Wraps | Why |
+|---|---|---|
+| `list_codepush_deployments` | App Center API | Discover deployment keys and see current release per environment |
+| `create_codepush_release` | `appcenter codepush release` | Push a JS bundle update — no store review |
+| `rollback_codepush_release` | App Center API | Revert to previous bundle |
+
+---
+
+## Phase 7 — Hosted by Codemagic
 
 Covered in detail in [HOSTING.md](./HOSTING.md): streamable HTTP transport,
 stateless token-per-request, CLI→REST migration, credential references into the
@@ -239,8 +342,12 @@ The local (stdio) version benefits too: a read-only token naturally produces a s
 | BrowserStack device testing | Defer | Official, actively maintained BrowserStack MCP server exists; users compose it alongside ours. |
 | Maestro / E2E in cloud | Defer to yaml | Runs as script steps on Codemagic VMs already. |
 | In-app purchases / subscriptions | Later | Full API + asc CLI support exists, but it is a deep domain; revisit on demand. |
-| Analytics / sales / finance reports | Later | `asc analytics/finance` covers it; agent-shaped but not publishing-critical. |
-| Customer review replies | Later (cheap) | Both stores have APIs (≤350 chars on Play); nice agent win when Phase 2/3 settle. |
+| iOS App Store review replies | Not possible | ASC API has no POST for developer replies — UI-only. Reading/deleting existing replies is possible but low value. |
+| Google Play review replies | Phase 5 | Moving to Phase 5 — clean REST API, high value. |
+| Apple Analytics Reports | Phase 5 | Moving to Phase 5 — ASC API v3.4 (March 2024), 50+ report types. |
+| OTA updates (Shorebird / CodePush) | Phase 6 | Segmented audiences (Flutter vs React Native); both need separate CLIs and credentials. Deferred until Phase 5 is stable. |
+| In-app purchases / subscriptions | Later | Full API + asc CLI support exists, but it is a deep domain that shifts product identity from CI/CD to monetization manager. |
+| App size monitoring | Later (external) | Emerge Tools / Sentry have APIs; only useful if the team already uses one of those services. |
 | Diawi, Appetize.io | Skip / park | Superseded by TestFlight + internal app sharing; Appetize's browser-preview is interesting for demos but unverified. |
 
 ---
@@ -249,6 +356,10 @@ The local (stdio) version benefits too: a read-only token naturally produces a s
 
 Phase 2 before Phase 3 because an agent that can *ship* but not *decorate* is
 useful; the reverse is not. Phase 4 is interleaved-able — the checklist prompt
-costs little and serves the exact audience we target. Phase 5 is a business
-decision, not an engineering sequence point; nothing in Phases 2–4 blocks on it,
-and everything in them increases its value.
+costs little and serves the exact audience we target. Phase 5 closes the "what
+happened after I shipped?" loop — test results, analytics, and review engagement
+are the natural next questions once the build → publish path is solid. Phase 6
+(OTA) is segmented by platform and requires the developer to have already set up
+an OTA service, so it does not block Phase 5 or the 1.0 launch. Phase 7
+(hosted) is a Codemagic business decision, not an engineering sequence point —
+nothing in Phases 2–6 blocks on it, and everything in them increases its value.
