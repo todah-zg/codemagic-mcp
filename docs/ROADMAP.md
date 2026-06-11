@@ -10,7 +10,7 @@ crossing it.
 
 ---
 
-## Where we are (Phase 3 — complete)
+## Where we are (Phase 4 — complete)
 
 **Phase 1:** 27 tools across four domains (Codemagic, ASC, Google Play, YAML), 15 yaml
 templates, project-type detection, three workflow prompts, webhook management,
@@ -38,8 +38,19 @@ CLI has no listing, image, or data safety support). New `codemagic.yaml` templat
 emulator on Linux), `flutter-screenshots` (Flutter golden tests, no emulator).
 Total: 65 tools, 18 templates.
 
-What we can NOT do today: first-publish guidance (app record creation, privacy labels,
-compliance forms are UI-only on both stores).
+**Phase 4:** Guidance layer. `first_publish_ios` and `first_publish_android` prompt
+checklists walk first-time publishers through the UI-only steps (Apple Developer
+enrollment, app record creation, age rating, privacy labels; Play account, IARC rating,
+closed testing period) and hand off to the existing release workflows. New
+`check_publish_readiness` tool aggregates live API checks (valid build, store listing
+completeness, binary validation via `asc validate`) with a static "human required"
+section for items that have no public API. Every item is tagged "agent can fix" or
+"human required" so the agent knows exactly what to do next. Total: 66 tools, 5 prompts,
+18 templates.
+
+What we can NOT do today: reject-and-reply via Resolution Center (UI only on both
+stores); deep export compliance status read-back; screenshot presence check (would
+require a new `asc screenshots list` wrapper).
 
 ---
 
@@ -177,19 +188,25 @@ small and as guided as possible.*
 | Compliance forms | Privacy "nutrition labels" (UI only) | IARC content rating, app-content declarations (UI only) |
 | Review friction | Resolution Center replies are UI-only | New personal accounts: mandatory closed-testing period with minimum testers before production access |
 
-**What we build:**
+**What we built:**
 
-- `first_publish_checklist` prompt (per platform) — walks the human through the
-  one-time ~10-minute UI session with exact navigation steps, then the agent
-  takes over everything else, forever.
-- `check_publish_readiness` tool — aggregates `asc validate` (iOS) and edit
-  validation (Android) into a single "can we ship today, and if not, what is
-  missing and who fixes it (agent vs human)" report. This is the feature for the
-  audience that "might not know what is needed in the first place."
-- Rejection handling: agent detects rejection via `get_asc_review_status`,
-  explains the cited guideline, prepares the fixed resubmission; human replies
-  in Resolution Center if a message is required. (asc has experimental
-  `web review` for rejection detail — watch, don't depend.)
+- ✓ `first_publish_ios` prompt — walks through Apple Developer enrollment, app record
+  creation, age rating questionnaire, privacy nutrition labels, privacy policy URL,
+  and first version creation; then hands off to `/ios_release`.
+- ✓ `first_publish_android` prompt — covers Play developer account, identity
+  verification, app record creation, IARC content rating, data safety form,
+  app access, target audience, and the closed testing requirement for new personal
+  accounts; then hands off to `/android_release`.
+- ✓ `check_publish_readiness` tool — live API checks: valid build (`listAscBuilds`),
+  store listing completeness (`getIosStoreListing` / `getAndroidStoreListing`),
+  binary validation (`asc validate` for iOS, bundle + track presence for Android).
+  Static "human required" section always present: age rating, privacy labels, legal
+  agreements (iOS); IARC, data safety, app access, closed testing (Android). Every
+  item tagged "agent can fix" with tool name, or "human required" with Play/ASC
+  navigation path.
+- Rejection handling: agent can detect rejection via `get_asc_review_status` and
+  explain the cited guideline — Resolution Center replies remain UI-only. Deferred
+  to a later phase if asc experimental `web review` stabilises.
 
 ---
 

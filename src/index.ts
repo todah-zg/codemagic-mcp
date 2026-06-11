@@ -8,6 +8,7 @@ import { registerGooglePlayTools } from "./tools/googleplay.js";
 import { registerYamlTools } from "./tools/yaml.js";
 import { registerPrompts } from "./prompts.js";
 import { registerReleaseNotesTools } from "./tools/releasenotes.js";
+import { registerReadinessTools } from "./tools/readiness.js";
 
 // Validate required credentials
 const apiToken = process.env.CODEMAGIC_API_TOKEN;
@@ -44,6 +45,7 @@ registerGooglePlayTools(server);
 registerYamlTools(server);
 registerPrompts(server);
 registerReleaseNotesTools(server);
+registerReadinessTools(server);
 
 
 // Start

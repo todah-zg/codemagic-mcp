@@ -259,6 +259,7 @@ You can also describe what you want in plain language — Claude will select the
 | Tool | Description |
 |------|-------------|
 | `prepare_release_notes` | Validate localized release notes — checks BCP-47 locale codes and char limits (Android: 500, iOS: 4000) |
+| `check_publish_readiness` | Aggregate publish-readiness checks for iOS or Android. API-verifiable items (valid build, listing completeness, binary validation) run live; items with no API (age rating, privacy labels, legal agreements) are always listed as human-required. Each item is tagged as 'agent can fix' or 'human required'. |
 
 ### Variable Groups
 
@@ -287,6 +288,8 @@ You can also describe what you want in plain language — Claude will select the
 | `onboarding` | Zero to first debug build — add repo, get template, trigger build, configure webhook |
 | `android_release` | Signed AAB from build to Google Play — build number, template, trigger, publish, promote |
 | `ios_release` | Signed IPA from build to App Store — build number, template, trigger, TestFlight, metadata, validate, submit, release |
+| `first_publish_ios` | One-time setup checklist for first-time iOS publishers — Apple Developer enrollment, app record, age rating, privacy labels, then hands off to /ios_release |
+| `first_publish_android` | One-time setup checklist for first-time Android publishers — Play account, content rating, closed testing period, then hands off to /android_release |
 
 Prompts are reusable workflow playbooks. In Claude Desktop they appear as slash commands. An agent can also invoke them by name to get step-by-step instructions for a complete workflow.
 
