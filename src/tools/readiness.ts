@@ -237,13 +237,13 @@ export function registerReadinessTools(server: McpServer): void {
   }, async ({ platform, app_id, version, package_name, language }) => {
     if (platform === "ios") {
       if (!app_id || !version) {
-        return { content: [{ type: "text", text: "app_id and version are required for platform=ios." }] };
+        return { content: [{ type: "text", text: "app_id and version are required for platform=ios." }], isError: true };
       }
       const checks = await runIosChecks(app_id, version);
       return { content: [{ type: "text", text: renderReport("iOS", `${app_id} v${version}`, checks) }] };
     } else {
       if (!package_name) {
-        return { content: [{ type: "text", text: "package_name is required for platform=android." }] };
+        return { content: [{ type: "text", text: "package_name is required for platform=android." }], isError: true };
       }
       const checks = await runAndroidChecks(package_name, language ?? "en-US");
       return { content: [{ type: "text", text: renderReport("Android", package_name, checks) }] };
