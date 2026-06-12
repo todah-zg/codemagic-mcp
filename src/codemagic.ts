@@ -600,11 +600,15 @@ export async function createPublicArtifactUrl(
   artifactUrl: string,
   expiresAt: number
 ): Promise<{ url: string; expiresAt: string }> {
-  const prefix = `${BASE_URL_V1}/artifacts/`;
-  if (!artifactUrl.startsWith(prefix)) {
+  // Use the URL parser to extract the path — avoids brittle slash-counting on the raw string.
+  // The API occasionally returns paths with extra leading slashes (e.g. //artifacts/...).
+  let parsed: URL;
+  try { parsed = new URL(artifactUrl); } catch { throw new Error(`Unexpected artifact URL format: ${artifactUrl}`); }
+  const pathMatch = parsed.pathname.match(/^\/*artifacts\/(.+)$/);
+  if (parsed.host !== "api.codemagic.io" || !pathMatch) {
     throw new Error(`Unexpected artifact URL format: ${artifactUrl}`);
   }
-  const secureFilename = artifactUrl.slice(prefix.length);
+  const secureFilename = pathMatch[1];
   const response = await fetch(`${BASE_URL_V1}/artifacts/${secureFilename}/public-url`, {
     method: "POST",
     headers: { "x-auth-token": apiToken, "Content-Type": "application/json" },
