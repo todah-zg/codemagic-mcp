@@ -432,7 +432,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
       artifact_url: z.string().describe("The short_lived_download_url from a build artifact (returned by get_build or wait_for_build)"),
-      expires_in_hours: z.number().optional().describe("How many hours until the public URL expires (default: 24, max: practical limit is a few days)"),
+      expires_in_hours: z.number().min(1).optional().describe("How many hours until the public URL expires (default: 24, max: practical limit is a few days)"),
     },
   }, async ({ artifact_url, expires_in_hours = 24 }) => {
     const expiresAt = Math.floor(Date.now() / 1000) + expires_in_hours * 3600;
