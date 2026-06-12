@@ -96,10 +96,14 @@ export async function uploadToGooglePlay(
   releaseNotes?: string,
   releaseNotesLanguage?: string,
   draft?: boolean,
+  apiToken?: string,
 ): Promise<string> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
 
-  const response = await fetch(aabUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  const response = await fetch(aabUrl, {
+    headers: apiToken ? { "x-auth-token": apiToken } : {},
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
   }
@@ -182,9 +186,12 @@ export async function setRolloutFraction(
  * Returns a shareable download URL — no track or review required.
  * @param aabUrl - Direct download URL for the AAB (e.g. a Codemagic artifact URL).
  */
-export async function shareAppInternally(aabUrl: string): Promise<unknown> {
+export async function shareAppInternally(aabUrl: string, apiToken?: string): Promise<unknown> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
-  const response = await fetch(aabUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  const response = await fetch(aabUrl, {
+    headers: apiToken ? { "x-auth-token": apiToken } : {},
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
   const aabLen = parseInt(response.headers.get("content-length") ?? "0", 10);
   if (aabLen > MAX_ARTIFACT_BYTES) throw new Error(`AAB too large to download: ${aabLen} bytes`);

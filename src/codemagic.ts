@@ -11,7 +11,8 @@ async function buildApiError(response: Response): Promise<Error> {
   return new Error(`Codemagic API error: ${response.status} ${response.statusText}${detail}`);
 }
 
-function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown, context: string): T {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function parseOrThrow<T>(schema: z.ZodType<T, z.ZodTypeDef, any>, data: unknown, context: string): T {
   const result = schema.safeParse(data);
   if (!result.success) {
     const issues = result.error.issues
@@ -22,6 +23,8 @@ function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown, context: string): 
   return result.data;
 }
 
+// Used by listBuilds (v3 API). Normalises short_lived_download_url → url so both
+// list and detail paths expose the same Artifact shape.
 const ArtifactSchema = z.object({
   name: z.string(),
   type: z.string(),
@@ -29,7 +32,55 @@ const ArtifactSchema = z.object({
   short_lived_download_url: z.string(),
   version_name: z.string().nullable(),
   version_code: z.string().nullable(),
-});
+}).transform(a => ({
+  name: a.name,
+  type: a.type,
+  size_in_bytes: a.size_in_bytes,
+  url: a.short_lived_download_url,
+  version_name: a.version_name,
+  version_code: a.version_code,
+}));
+
+// Used by getBuild (v1 API). Field names differ: artefacts (British), size, versionCode.
+const V1ArtifactSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  url: z.string(),
+  size: z.number(),
+  versionName: z.string().nullable().optional(),
+  versionCode: z.string().nullable().optional(),
+}).transform(a => ({
+  name: a.name,
+  type: a.type,
+  url: a.url,
+  size_in_bytes: a.size,
+  version_name: a.versionName ?? null,
+  version_code: a.versionCode ?? null,
+}));
+
+const V1BuildSchema = z.object({
+  _id: z.string(),
+  appId: z.string(),
+  status: z.string(),
+  index: z.number(),
+  branch: z.string().nullable().optional(),
+  tag: z.string().nullable().optional(),
+  createdAt: z.string(),
+  startedAt: z.string().nullable().optional(),
+  finishedAt: z.string().nullable().optional(),
+  artefacts: z.array(V1ArtifactSchema).default([]),
+}).transform(b => ({
+  id: b._id,
+  app_id: b.appId,
+  status: b.status,
+  index: b.index,
+  branch: b.branch ?? null,
+  tag: b.tag ?? null,
+  created_at: b.createdAt,
+  started_at: b.startedAt ?? null,
+  finished_at: b.finishedAt ?? null,
+  artifacts: b.artefacts,
+}));
 
 const BuildSchema = z.object({
   id: z.string(),
@@ -158,8 +209,8 @@ export interface Artifact {
   name: string;
   type: string;
   size_in_bytes: number;
-  /** Short-lived download URL. Valid for ~2 hours after build completion. */
-  short_lived_download_url: string;
+  /** Artifact download URL. From get_build/wait_for_build (v1 API): permanent, requires x-auth-token. From list_builds (v3 API): short-lived JWT, self-authenticating. */
+  url: string;
   version_name: string | null;
   version_code: string | null;
 }
@@ -230,13 +281,13 @@ export async function listBuilds(
  * @param buildId - The build ID.
  */
 export async function getBuild(apiToken: string, buildId: string): Promise<Build> {
-  const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}`, {
+  const response = await fetch(`${BASE_URL_V1}/builds/${buildId}`, {
     headers: { "x-auth-token": apiToken },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const { data } = parseOrThrow(z.object({ data: BuildSchema }), await response.json(), "getBuild");
-  return data;
+  const { build } = parseOrThrow(z.object({ build: V1BuildSchema }), await response.json(), "getBuild");
+  return build;
 }
 
 export interface TriggerBuildParams {
@@ -586,12 +637,11 @@ export async function deleteCache(apiToken: string, appId: string, cacheId?: str
 
 /**
  * Create a time-limited public download URL for a build artifact.
- * The artifact URL comes from getBuild() or waitForBuild() — it has the form
- * https://api.codemagic.io/artifacts/{secureFilename}. The secureFilename is
- * extracted and used to POST to the public-url endpoint.
+ * Expects a v1 artifact URL from getBuild() / waitForBuild() —
+ * the form https://api.codemagic.io/artifacts/{uuid}/{uuid}/{filename}.
  * WARNING: public URLs are accessible without authentication — share carefully.
  * @param apiToken - Codemagic API token.
- * @param artifactUrl - The short_lived_download_url from a build artifact.
+ * @param artifactUrl - The artifact url from a build artifact (returned by get_build or wait_for_build).
  * @param expiresAt - URL expiry as a Unix timestamp in seconds.
  * @returns The public download URL and its expiry datetime string.
  */
@@ -600,16 +650,15 @@ export async function createPublicArtifactUrl(
   artifactUrl: string,
   expiresAt: number
 ): Promise<{ url: string; expiresAt: string }> {
-  // Use the URL parser to extract the path — avoids brittle slash-counting on the raw string.
-  // The API occasionally returns paths with extra leading slashes (e.g. //artifacts/...).
-  let parsed: URL;
-  try { parsed = new URL(artifactUrl); } catch { throw new Error(`Unexpected artifact URL format: ${artifactUrl}`); }
-  const pathMatch = parsed.pathname.match(/^\/*artifacts\/(.+)$/);
-  if (parsed.host !== "api.codemagic.io" || !pathMatch) {
-    throw new Error(`Unexpected artifact URL format: ${artifactUrl}`);
+  const prefix = `${BASE_URL_V1}/artifacts/`;
+  if (!artifactUrl.startsWith(prefix)) {
+    throw new Error(
+      `Unexpected artifact URL format: ${artifactUrl}. ` +
+      `Expected a URL from get_build or wait_for_build (https://api.codemagic.io/artifacts/…).`
+    );
   }
-  const secureFilename = pathMatch[1];
-  const response = await fetch(`${BASE_URL_V1}/artifacts/${secureFilename}/public-url`, {
+  const artifactPath = artifactUrl.slice(prefix.length);
+  const response = await fetch(`${prefix}${artifactPath}/public-url`, {
     method: "POST",
     headers: { "x-auth-token": apiToken, "Content-Type": "application/json" },
     body: JSON.stringify({ expiresAt }),

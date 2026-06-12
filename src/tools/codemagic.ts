@@ -72,14 +72,14 @@ export function registerCodemagicTools(server: McpServer, apiToken: string, vers
   });
 
   server.registerTool("get_build", {
-    description: "Get full details for a single build including artifact download URLs. The build ID comes from trigger_build or list_builds. Artifact URLs are short-lived — use them promptly, or use wait_for_build which returns them automatically on completion.",
+    description: "Get full details for a single build including artifact download URLs. The build ID comes from trigger_build or list_builds. Artifact URLs require x-auth-token — use them with upload_to_testflight, upload_to_google_play, or create_public_artifact_url.",
     inputSchema: {
       build_id: z.string().describe("The build ID"),
     },
   }, async ({ build_id }) => {
     const build = await getBuild(apiToken, build_id);
     const artifactLines = build.artifacts.map(a =>
-      ` - ${a.name} (${a.type}, ${a.size_in_bytes} bytes)\n   ${a.short_lived_download_url}`
+      ` - ${a.name} (${a.type}, ${a.size_in_bytes} bytes)\n   ${a.url}`
     ).join("\n");
     const text = [
       `Build #${build.index} - ${build.status}`,
@@ -154,7 +154,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string, vers
     }
 
     const artifactLines = build.artifacts.map(a =>
-      `  - ${a.name} (${a.type})\n    ${a.short_lived_download_url}`
+      `  - ${a.name} (${a.type})\n    ${a.url}`
     ).join("\n");
     const text = [
       `Build #${build.index} — ${build.status}`,
@@ -431,7 +431,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string, vers
       "Use for sharing IPAs or AABs with testers who don't have Codemagic access.",
     annotations: { readOnlyHint: false, destructiveHint: false },
     inputSchema: {
-      artifact_url: z.string().describe("The short_lived_download_url from a build artifact (returned by get_build or wait_for_build)"),
+      artifact_url: z.string().describe("The artifact url from a build artifact (returned by get_build or wait_for_build)"),
       expires_in_hours: z.number().min(1).optional().describe("How many hours until the public URL expires (default: 24, max: practical limit is a few days)"),
     },
   }, async ({ artifact_url, expires_in_hours = 24 }) => {

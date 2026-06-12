@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listAscApps, listAscBuilds, listTestFlightGroups, getReviewStatus, getReleaseStatus, uploadToTestFlight, uploadBuildToAsc, submitForAppStoreReview, validateAppSubmission, setVersionMetadata, setExportCompliance, releaseVersion, setPhasedRelease, submitBetaReview, addTestFlightTester, createTestFlightGroup, getIosStoreListing, setIosStoreListing, listIosScreenshotTypes, uploadIosScreenshots } from "../asc.js";
 
-export function registerAscTools(server: McpServer): void {
+export function registerAscTools(server: McpServer, apiToken: string): void {
 
   server.registerTool("list_asc_apps", {
     description: "List apps in App Store Connect. Call this first to get the ASC app ID needed by all other App Store Connect tools.",
@@ -293,7 +293,7 @@ export function registerAscTools(server: McpServer): void {
       beta_group: z.string().optional().describe("TestFlight beta group name to distribute to after upload"),
     },
   }, async ({ app_id, ipa_url, beta_group }) => {
-    const result = await uploadToTestFlight(app_id, ipa_url, beta_group);
+    const result = await uploadToTestFlight(app_id, ipa_url, beta_group, apiToken);
     return {
       content: [{ type: "text", text: `Upload complete.\n${result}` }],
     };
@@ -311,7 +311,7 @@ export function registerAscTools(server: McpServer): void {
       ipa_url: z.string().describe("The IPA download URL from a Codemagic build artifact"),
     },
   }, async ({ app_id, ipa_url }) => {
-    const build = await uploadBuildToAsc(app_id, ipa_url);
+    const build = await uploadBuildToAsc(app_id, ipa_url, apiToken);
     return {
       content: [{
         type: "text",

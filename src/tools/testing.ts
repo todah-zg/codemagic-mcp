@@ -106,7 +106,7 @@ export function registerTestingTools(server: McpServer, apiToken: string): void 
 
         if (allXml.length > 0) {
           // Found XML files but none matched the test heuristic — try them anyway
-          xmlUrls = allXml.map(a => a.short_lived_download_url);
+          xmlUrls = allXml.map(a => a.url);
         } else {
           return {
             content: [{
@@ -126,7 +126,7 @@ export function registerTestingTools(server: McpServer, apiToken: string): void 
           };
         }
       } else {
-        xmlUrls = testArtifacts.map(a => a.short_lived_download_url);
+        xmlUrls = testArtifacts.map(a => a.url);
       }
     }
 

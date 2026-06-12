@@ -3,7 +3,7 @@ import { z } from "zod";
 import { listTracks, listBundles, uploadToGooglePlay, promoteRelease, setRolloutFraction, shareAppInternally, getLatestBuildNumber } from "../googleplay.js";
 import { getAndroidStoreListing, setAndroidStoreListing, uploadAndroidScreenshots, setAndroidDataSafety, listGooglePlayReviews, replyToGooglePlayReview } from "../androidpublisher.js";
 
-export function registerGooglePlayTools(server: McpServer): void {
+export function registerGooglePlayTools(server: McpServer, apiToken: string): void {
 
   server.registerTool("list_google_play_tracks", {
     description: "List Google Play tracks (internal, alpha, beta, production) with current release info and version codes. Find the highest versionCode across all tracks, increment by 1, and pass that as BUILD_NUMBER in trigger_build variables before triggering a release build.",
@@ -52,7 +52,7 @@ export function registerGooglePlayTools(server: McpServer): void {
       draft: z.boolean().optional().describe("Upload as a draft release instead of publishing immediately"),
     },
   }, async ({ aab_url, track, release_name, release_notes, release_notes_language, draft }) => {
-    const result = await uploadToGooglePlay(aab_url, track, release_name, release_notes, release_notes_language, draft);
+    const result = await uploadToGooglePlay(aab_url, track, release_name, release_notes, release_notes_language, draft, apiToken);
     return {
       content: [{ type: "text", text: `Published to Google Play (${track} track).\n${result}` }],
     };
@@ -118,7 +118,7 @@ export function registerGooglePlayTools(server: McpServer): void {
       aab_url: z.string().describe("The AAB download URL from a Codemagic build artifact"),
     },
   }, async ({ aab_url }) => {
-    const result = await shareAppInternally(aab_url);
+    const result = await shareAppInternally(aab_url, apiToken);
     return {
       content: [{ type: "text", text: `Internal sharing link created.\n${JSON.stringify(result, null, 2)}` }],
     };

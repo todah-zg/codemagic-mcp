@@ -221,11 +221,15 @@ export async function validateAppSubmission(appId: string, version: string): Pro
 export async function uploadToTestFlight(
   appId: string,
   ipaUrl: string,
-  betaGroup?: string
+  betaGroup?: string,
+  apiToken?: string,
 ): Promise<string> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
 
-  const response = await fetch(ipaUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  const response = await fetch(ipaUrl, {
+    headers: apiToken ? { "x-auth-token": apiToken } : {},
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) {
     throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
   }
@@ -261,9 +265,12 @@ export interface AscBuildUploadResult {
  * @param ipaUrl - Direct download URL for the IPA (e.g. a Codemagic artifact URL).
  * @returns Build ID, build number, and version string for use in subsequent calls.
  */
-export async function uploadBuildToAsc(appId: string, ipaUrl: string): Promise<AscBuildUploadResult> {
+export async function uploadBuildToAsc(appId: string, ipaUrl: string, apiToken?: string): Promise<AscBuildUploadResult> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
-  const response = await fetch(ipaUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+  const response = await fetch(ipaUrl, {
+    headers: apiToken ? { "x-auth-token": apiToken } : {},
+    signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+  });
   if (!response.ok) throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
   const ipaLen = parseInt(response.headers.get("content-length") ?? "0", 10);
   if (ipaLen > MAX_ARTIFACT_BYTES) throw new Error(`IPA too large to download: ${ipaLen} bytes`);
