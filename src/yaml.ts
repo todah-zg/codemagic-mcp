@@ -4,26 +4,30 @@ export { getYamlTemplate, listYamlTemplateTypes } from "./templates.js";
 
 const ajv = new Ajv({ allErrors: true });
 
-let schemaPromise: Promise<object> | null = null;
-/**
- * Fetch and cache the official Codemagic JSON schema.
- * The schema is fetched once and reused for subsequent validations.
- */
-async function getSchema(): Promise<object> {
-  if (!schemaPromise) {
-    schemaPromise = fetch("https://codemagic.io/codemagic-schema.json").then(async response => {
-      if (!response.ok) {
-        throw new Error(`Failed to fetch schema: ${response.status} ${response.statusText}`);
-      }
-      return response.json() as Promise<object>;
-    });
+// Cache the compiled validator, not the raw schema — one compile, ever.
+// Cleared on any fetch/compile failure so the next call retries cleanly.
+let validatorPromise: Promise<ReturnType<typeof ajv.compile>> | null = null;
+
+function getValidator(): Promise<ReturnType<typeof ajv.compile>> {
+  if (!validatorPromise) {
+    validatorPromise = fetch("https://codemagic.io/codemagic-schema.json", {
+      signal: AbortSignal.timeout(10_000),
+    })
+      .then(async r => {
+        if (!r.ok) throw new Error(`Failed to fetch schema: ${r.status} ${r.statusText}`);
+        return ajv.compile(await r.json() as object);
+      })
+      .catch(err => {
+        validatorPromise = null; // transient failure — allow retry on next call
+        throw err;
+      });
   }
-  return schemaPromise;
+  return validatorPromise;
 }
 
-/** Reset the schema cache — for use in tests only. */
+/** Reset the validator cache — for use in tests only. */
 export function _resetSchemaCache(): void {
-  schemaPromise = null;
+  validatorPromise = null;
 }
 
 export interface ValidationResult {
@@ -47,8 +51,7 @@ export async function validateCodemagicYaml(yamlContent: string): Promise<Valida
     };
   }
 
-  const schemaObj = await getSchema();
-  const validate = ajv.compile(schemaObj);
+  const validate = await getValidator();
   const valid = validate(parsed) as boolean;
 
   return {
