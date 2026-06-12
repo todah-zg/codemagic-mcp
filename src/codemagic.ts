@@ -98,9 +98,9 @@ const BuildSchema = z.object({
 const ApplicationSchema = z.object({
   id: z.string(),
   name: z.string(),
-  icon_url: z.string(),
-  last_build_id: z.string(),
-  archived: z.boolean(),
+  icon_url: z.string().nullable(),
+  last_build_id: z.string().nullable(),
+  archived: z.boolean().nullable(),
 });
 
 const TeamSchema = z.object({
@@ -174,9 +174,9 @@ async function fetchAllPages<T>(apiToken: string, url: string, itemSchema: z.Zod
 export interface Application {
   id: string;
   name: string;
-  icon_url: string;
-  last_build_id: string;
-  archived: boolean;
+  icon_url: string | null;
+  last_build_id: string | null;
+  archived: boolean | null;
 }
 
 /**
