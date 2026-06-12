@@ -3,6 +3,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { execFile } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { registerCodemagicTools } from "./tools/codemagic.js";
 import { registerAscTools } from "./tools/asc.js";
@@ -14,6 +15,7 @@ import { registerReadinessTools } from "./tools/readiness.js";
 import { registerTestingTools } from "./tools/testing.js";
 
 const execFileAsync = promisify(execFile);
+const { version } = JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")) as { version: string };
 
 async function binaryVersion(cmd: string): Promise<string | null> {
   try {
@@ -53,7 +55,7 @@ console.error(`google-play: ${gpVersion ? `found ${gpVersion}` : "NOT FOUND — 
 const server = new McpServer({
   name: "codemagic-mcp",
   description: "MCP server for Codemagic CI/CD, App Store Connect, and Google Play",
-  version: "1.0.0",
+  version,
 });
 
 // Register tools by domain
