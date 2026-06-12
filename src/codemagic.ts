@@ -9,6 +9,30 @@ async function buildApiError(response: Response): Promise<Error> {
   return new Error(`Codemagic API error: ${response.status} ${response.statusText}${detail}`);
 }
 
+/**
+ * Fetch all pages of a page-numbered v3 list endpoint.
+ * Uses page_size=100 to minimise round trips. Stops when current_page >= total_pages.
+ */
+async function fetchAllPages<T>(apiToken: string, url: string, extraParams = new URLSearchParams()): Promise<T[]> {
+  const all: T[] = [];
+  let page = 1;
+  while (true) {
+    const params = new URLSearchParams(extraParams);
+    params.set("page", String(page));
+    params.set("page_size", "100");
+    const response = await fetch(`${url}?${params}`, {
+      headers: { "x-auth-token": apiToken },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) throw await buildApiError(response);
+    const data = await response.json() as { data: T[]; current_page: number; total_pages: number };
+    all.push(...data.data);
+    if (data.current_page >= data.total_pages || data.data.length === 0) break;
+    page++;
+  }
+  return all;
+}
+
 export interface Application {
   id: string;
   name: string;
@@ -23,16 +47,10 @@ export interface Application {
  * @param teamId - Optional team ID. If omitted, returns apps for the authenticated user.
  */
 export async function listApplications(apiToken: string, teamId?: string): Promise<Application[]> {
-  const path = teamId
-    ? `/api/v3/teams/${teamId}/apps`
-    : `/api/v3/user/apps`;
-  const response = await fetch(`${BASE_URL_V3}${path}`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: Application[] };
-  return data.data;
+  const url = teamId
+    ? `${BASE_URL_V3}/api/v3/teams/${teamId}/apps`
+    : `${BASE_URL_V3}/api/v3/user/apps`;
+  return fetchAllPages<Application>(apiToken, url);
 }
 
 export interface Team {
@@ -46,13 +64,7 @@ export interface Team {
  * @param apiToken - Codemagic API token.
  */
 export async function listTeams(apiToken: string): Promise<Team[]> {
-  const response = await fetch(`${BASE_URL_V3}/api/v3/user/teams`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: Array<{ id: string; name: string }> };
-  return data.data.map(t => ({ id: t.id, name: t.name }));
+  return fetchAllPages<Team>(apiToken, `${BASE_URL_V3}/api/v3/user/teams`);
 }
 
 export interface Artifact {
@@ -78,37 +90,47 @@ export interface Build {
   artifacts: Artifact[];
 }
 
+export interface BuildsResult {
+  builds: Build[];
+  hasMore: boolean;
+}
+
 /**
- * List builds for a team, with optional filters.
- * Uses the v3 API which is team-scoped — a teamId is always required.
+ * List builds for a team, with optional filters and a result cap.
+ * Uses cursor-based pagination — fetches pages of up to 100 until maxResults is reached
+ * or no more pages exist. hasMore=true means results were truncated.
  * @param apiToken - Codemagic API token.
  * @param teamId - Team ID to list builds for.
  * @param filters - Optional filters for app, status, branch, or workflow.
+ * @param maxResults - Maximum builds to return (default 50).
  */
 export async function listBuilds(
   apiToken: string,
   teamId: string,
-  filters?: {
-    app_id?: string;
-    status?: string;
-    branch?: string;
-    workflow_id?: string;
+  filters?: { app_id?: string; status?: string; branch?: string; workflow_id?: string },
+  maxResults = 50,
+): Promise<BuildsResult> {
+  const all: Build[] = [];
+  let cursor: string | undefined;
+  while (all.length < maxResults) {
+    const params = new URLSearchParams();
+    if (filters?.app_id) params.set("app_id", filters.app_id);
+    if (filters?.status) params.set("status", filters.status);
+    if (filters?.branch) params.set("branch", filters.branch);
+    if (filters?.workflow_id) params.set("workflow_id", filters.workflow_id);
+    params.set("page_size", String(Math.min(maxResults - all.length, 100)));
+    if (cursor) params.set("cursor", cursor);
+    const response = await fetch(`${BASE_URL_V3}/api/v3/teams/${teamId}/builds?${params}`, {
+      headers: { "x-auth-token": apiToken },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    });
+    if (!response.ok) throw await buildApiError(response);
+    const data = await response.json() as { data: Build[]; cursor?: string };
+    all.push(...data.data);
+    cursor = data.cursor;
+    if (!cursor || data.data.length === 0) break;
   }
-): Promise<Build[]> {
-  const params = new URLSearchParams();
-  if (filters?.app_id) params.set("app_id", filters.app_id);
-  if (filters?.status) params.set("status", filters.status);
-  if (filters?.branch) params.set("branch", filters.branch);
-  if (filters?.workflow_id) params.set("workflow_id", filters.workflow_id);
-
-  const query = params.size > 0 ? `?${params}` : "";
-  const response = await fetch(`${BASE_URL_V3}/api/v3/teams/${teamId}/builds${query}`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: Build[] };
-  return data.data;
+  return { builds: all, hasMore: !!cursor };
 }
 
 /**
@@ -301,21 +323,11 @@ export interface Variable {
  * @param teamId - Team ID (mutually exclusive with appId).
  * @param appId - App ID for app-scoped groups (mutually exclusive with teamId).
  */
-export async function listVariableGroups(
-  apiToken: string,
-  teamId?: string,
-  appId?: string
-): Promise<VariableGroup[]> {
-  const path = teamId
-    ? `/api/v3/teams/${teamId}/variable-groups`
-    : `/api/v3/apps/${appId}/variable-groups`;
-  const response = await fetch(`${BASE_URL_V3}${path}`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: VariableGroup[] };
-  return data.data;
+export async function listVariableGroups(apiToken: string, teamId?: string, appId?: string): Promise<VariableGroup[]> {
+  const url = teamId
+    ? `${BASE_URL_V3}/api/v3/teams/${teamId}/variable-groups`
+    : `${BASE_URL_V3}/api/v3/apps/${appId}/variable-groups`;
+  return fetchAllPages<VariableGroup>(apiToken, url);
 }
 
 /**
@@ -326,13 +338,7 @@ export async function listVariableGroups(
  * @param groupId - The variable group ID.
  */
 export async function listVariables(apiToken: string, groupId: string): Promise<Variable[]> {
-  const response = await fetch(`${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: Variable[] };
-  return data.data;
+  return fetchAllPages<Variable>(apiToken, `${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`);
 }
 
 /**
@@ -588,13 +594,7 @@ export interface BuildAction {
  * @param buildId - The build ID.
  */
 export async function getBuildActions(apiToken: string, buildId: string): Promise<BuildAction[]> {
-  const response = await fetch(`${BASE_URL_V3}/api/v3/builds/${buildId}/actions`, {
-    headers: { "x-auth-token": apiToken },
-    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-  });
-  if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: BuildAction[] };
-  return data.data;
+  return fetchAllPages<BuildAction>(apiToken, `${BASE_URL_V3}/api/v3/builds/${buildId}/actions`);
 }
 
 /**

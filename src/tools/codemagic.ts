@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache, createPublicArtifactUrl } from "../codemagic.js";
+import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache, createPublicArtifactUrl, type BuildsResult } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
 export function registerCodemagicTools(server: McpServer, apiToken: string): void {
 
@@ -58,12 +58,16 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
       status: z.enum(["queued", "building", "finished", "failed", "canceled", "timeout", "skipped"]).optional().describe("Filter by build status"),
       branch: z.string().optional().describe("Filter by git branch"),
       workflow_id: z.string().optional().describe("Filter by workflow ID"),
+      limit: z.number().int().min(1).max(500).default(50).optional().describe("Maximum number of builds to return (default 50, max 500). Use filters to narrow results instead of raising this."),
     },
-  }, async ({ team_id, app_id, status, branch, workflow_id }) => {
-    const builds = await listBuilds(apiToken, team_id, { app_id, status, branch, workflow_id });
-    const text = builds.map(b => `#${b.index} ${b.status} - ${b.branch ?? b.tag ?? "no branch"} (${b.id})`).join("\n");
+  }, async ({ team_id, app_id, status, branch, workflow_id, limit = 50 }) => {
+    const { builds, hasMore } = await listBuilds(apiToken, team_id, { app_id, status, branch, workflow_id }, limit);
+    const lines = builds.map(b => `#${b.index} ${b.status} - ${b.branch ?? b.tag ?? "no branch"} (${b.id})`);
+    if (hasMore) {
+      lines.push(`\n(showing first ${builds.length} builds — use filters or increase limit to narrow results)`);
+    }
     return {
-      content: [{ type: "text", text: text || "No builds found." }],
+      content: [{ type: "text", text: lines.join("\n") || "No builds found." }],
     };
   });
 
