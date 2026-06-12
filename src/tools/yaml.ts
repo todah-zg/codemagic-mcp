@@ -26,7 +26,7 @@ export function registerYamlTools(server: McpServer): void {
   });
 
   server.registerTool("get_yaml_template", {
-    description: "Get a starter codemagic.yaml template for a given project type. Templates cover build and signing only — publishing is handled separately via App Store Connect tools. Call list_yaml_template_types to see all valid project_type values.",
+    description: "Get a starter codemagic.yaml template for a given project type. Templates cover build and signing only — publishing is handled separately via App Store Connect tools. Call list_yaml_template_types to see all valid project_type values. IMPORTANT: Android templates use linux_x2 by default (cheaper, no Mac needed). Personal accounts (no team) cannot use linux_x2 — replace it with mac_mini_m2 for personal accounts.",
     inputSchema: {
       project_type: z.string()
         .refine(

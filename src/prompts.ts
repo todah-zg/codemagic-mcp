@@ -20,6 +20,8 @@ Signing, release builds, and store publishing come after this succeeds.
    Call get_yaml_template with the matching debug project type:
      android-debug, flutter-android-debug, or react-native-android-debug.
    Replace PACKAGE_NAME with the actual application ID.
+   NOTE: Android templates default to linux_x2. Personal accounts (no team) cannot
+   use linux_x2 — replace it with mac_mini_m2 before validating or triggering.
 
 4. VALIDATE THE YAML
    Call validate_codemagic_yaml with the edited yaml.

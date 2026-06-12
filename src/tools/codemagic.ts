@@ -110,7 +110,7 @@ export function registerCodemagicTools(server: McpServer, apiToken: string, vers
       labels: z.array(z.string()).optional().describe("Labels to attach to the build"),
       yaml_content: z.string().optional().describe("A codemagic.yaml file content to use for this build. When provided, the yaml is passed inline and does not need to exist in the repository."),
       instance_type: z.string().optional().describe(
-        "Override the instance type for this build. Common values: mac_mini_m2, mac_pro, linux, linux_x2, linux_x4, windows_x2. Must be available on your billing plan. If omitted, the instance type from codemagic.yaml is used."
+        "Override the instance type for this build. Common values: mac_mini_m2, mac_mini_m4, linux_x2, linux_x4, windows_x2. Must be available on your billing plan. If omitted, the instance type from codemagic.yaml is used. IMPORTANT: Personal accounts (no team) can only use mac_mini_m2 — linux_x2, linux_x4, and mac_mini_m4 are not available on personal accounts."
       ),
     },
   }, async ({ app_id, workflow_id, branch, tag, variables, groups, labels, yaml_content, instance_type }) => {
