@@ -1,6 +1,6 @@
 {
   "name": "codemagic-mcp-server",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "MCP server for Codemagic CI/CD and App Store Connect / Google Play — build, sign, and publish mobile apps through AI agents",
   "keywords": [
     "mcp",
