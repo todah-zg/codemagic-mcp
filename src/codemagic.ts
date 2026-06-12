@@ -383,18 +383,9 @@ export async function addApplication(
 export const TERMINAL_STATUSES = new Set(["finished", "failed", "canceled", "timeout", "skipped"]);
 
 /**
- * Poll a build until it reaches a terminal state, then return it.
- * Caution: this blocks for the full duration of the build.
- * @param apiToken - Codemagic API token.
- * @param buildId - The build ID to wait for.
- * @param intervalSeconds - Polling interval in seconds. Default is 30.
- */
-/**
- * Check the current status of a build. Returns immediately — no polling loop.
- * The caller is responsible for re-invoking until a terminal status is reached.
- * Use TERMINAL_STATUSES to check whether the returned build has finished.
- * @param apiToken - Codemagic API token.
- * @param buildId - The build ID to check.
+ * Alias for getBuild — kept under this name for tool-surface continuity (the wait_for_build
+ * tool calls it in a polling loop; the name signals intent at the call site).
+ * Returns immediately; no polling loop.
  */
 export async function waitForBuild(apiToken: string, buildId: string): Promise<Build> {
   return getBuild(apiToken, buildId);
