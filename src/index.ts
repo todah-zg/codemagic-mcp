@@ -59,7 +59,7 @@ const server = new McpServer({
 });
 
 // Register tools by domain
-registerCodemagicTools(server, apiToken);
+registerCodemagicTools(server, apiToken, version);
 registerAscTools(server);
 registerGooglePlayTools(server);
 registerYamlTools(server);

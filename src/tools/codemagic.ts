@@ -2,13 +2,13 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { listApplications, listTeams, listBuilds, getBuild, triggerBuild, cancelBuild, listWorkflows, addApplication, waitForBuild, listVariableGroups, listVariables, createVariableGroup, addVariable, updateVariable, deleteVariable, getWebhookUrl, listWebhooks, deleteWebhook, getBuildActions, getStepLog, TERMINAL_STATUSES, listCaches, deleteCache, createPublicArtifactUrl, type BuildsResult } from "../codemagic.js";
 import { generateSSHKeyPair, parseGitHubRepo, addGitHubDeployKey, manualGenericInstructions } from "../ssh.js";
-export function registerCodemagicTools(server: McpServer, apiToken: string): void {
+export function registerCodemagicTools(server: McpServer, apiToken: string, version: string): void {
 
   server.registerTool("ping", {
-    description: "Check that the server is alive",
+    description: "Check that the server is alive and return its version",
   }, async () => {
     return {
-      content: [{ type: "text", text: "Codemagic MCP server is running." }],
+      content: [{ type: "text", text: `Codemagic MCP server is running. Version: ${version}` }],
     };
   });
 
