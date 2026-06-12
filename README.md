@@ -90,8 +90,9 @@ git clone https://github.com/todah-zg/codemagic-mcp.git
 cd codemagic-mcp
 npm install
 npm run build
-Then use the local path in your MCP config — see Running from a local clone below.
 ```
+
+Then use the local path in your MCP config — see [Running from a local clone](#running-from-a-local-clone) below.
 
 ## Running
 
@@ -163,13 +164,15 @@ If the server does not appear, check that the `CODEMAGIC_API_TOKEN` environment 
 
 ### Workflow prompts
 
-Once connected, type `/` in the Claude Desktop input field to open the command picker. You will see three workflow prompts from this server:
+Once connected, type `/` in the Claude Desktop input field to open the command picker. You will see five workflow prompts from this server:
 
 | Prompt | When to use |
 |--------|-------------|
 | `/onboarding` | Starting from scratch — connect a repo, get a first build passing |
 | `/android_release` | Build a signed AAB and publish it to Google Play |
 | `/ios_release` | Build a signed IPA and upload it to TestFlight |
+| `/first_publish_ios` | One-time setup for first-time iOS App Store publishers — Apple Developer enrollment, app record, age rating, privacy labels |
+| `/first_publish_android` | One-time setup for first-time Google Play publishers — Play account, content rating, closed testing period |
 
 Select a prompt and Claude will receive a step-by-step playbook and begin executing the workflow using the available tools.
 
