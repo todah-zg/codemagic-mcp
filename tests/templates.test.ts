@@ -1,32 +1,29 @@
 import { describe, it, expect } from "vitest";
 import * as yaml from "js-yaml";
-import { listYamlTemplateTypes, getYamlTemplate } from "../src/templates.js";
+import { listYamlTemplateTypes, getYamlTemplate, TEMPLATES } from "../src/templates.js";
+
+// Complete sorted list of known template types.
+// This is a strict equality check — if a new template is added to TEMPLATES, update this list too.
+// That deliberate friction is the point: it makes new template types visible in CI.
+const KNOWN_TYPES = [
+  "android", "android-debug", "android-screenshots",
+  "dotnet-maui",
+  "flutter", "flutter-android-debug", "flutter-native", "flutter-screenshots",
+  "ionic-capacitor", "ionic-cordova",
+  "ios", "ios-screenshots",
+  "kmm",
+  "react-native", "react-native-android-debug",
+  "snap",
+  "unity", "unity-oculus",
+];
 
 describe("listYamlTemplateTypes", () => {
-  it("returns a non-empty array", () => {
-    const types = listYamlTemplateTypes();
-    expect(types.length).toBeGreaterThan(0);
+  it("returns exactly the known template types", () => {
+    expect(listYamlTemplateTypes().sort()).toEqual(KNOWN_TYPES);
   });
 
-  it("includes all expected project types", () => {
-    const types = listYamlTemplateTypes();
-    // production types
-    expect(types).toContain("android");
-    expect(types).toContain("ios");
-    expect(types).toContain("flutter");
-    expect(types).toContain("react-native");
-    expect(types).toContain("ionic-capacitor");
-    expect(types).toContain("ionic-cordova");
-    expect(types).toContain("unity");
-    expect(types).toContain("flutter-native");
-    expect(types).toContain("kmm");
-    expect(types).toContain("snap");
-    expect(types).toContain("unity-oculus");
-    expect(types).toContain("dotnet-maui");
-    // debug / onboarding types
-    expect(types).toContain("android-debug");
-    expect(types).toContain("flutter-android-debug");
-    expect(types).toContain("react-native-android-debug");
+  it("matches the TEMPLATES object keys — no drift between source and list", () => {
+    expect(Object.keys(TEMPLATES).sort()).toEqual(KNOWN_TYPES);
   });
 });
 
