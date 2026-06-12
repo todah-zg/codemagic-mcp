@@ -164,6 +164,8 @@ export function registerCodemagicTools(server: McpServer, apiToken: string): voi
     ].join("\n");
     return {
       content: [{ type: "text", text }],
+      // Non-finished terminal states (failed, canceled, timeout, skipped) are surfaced as
+      // tool errors so the agent's call chain fails fast rather than proceeding with a bad build.
       isError: build.status !== "finished",
     };
   });
