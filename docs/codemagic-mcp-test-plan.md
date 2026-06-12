@@ -1,4 +1,4 @@
-Ve# Codemagic MCP — Test Plan & Scenario Scripts
+# Codemagic MCP — Test Plan & Scenario Scripts
 
 A hands-on test suite for exercising the Codemagic MCP server through an AI agent. Scenarios are written as natural conversations a real developer would have, and grouped by who they serve.
 
