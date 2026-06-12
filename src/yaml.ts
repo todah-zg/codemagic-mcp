@@ -2,7 +2,7 @@ import { Ajv } from "ajv";
 import * as yaml from "js-yaml";
 export { getYamlTemplate, listYamlTemplateTypes } from "./templates.js";
 
-const ajv = new Ajv({ allErrors: true });
+const ajv = new Ajv({ allErrors: true, strict: false });
 
 // Cache the compiled validator, not the raw schema — one compile, ever.
 // Cleared on any fetch/compile failure so the next call retries cleanly.

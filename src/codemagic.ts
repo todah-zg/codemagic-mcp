@@ -264,12 +264,12 @@ export async function listBuilds(
     });
     if (!response.ok) throw await buildApiError(response);
     const data = parseOrThrow(
-      z.object({ data: z.array(BuildSchema), cursor: z.string().optional() }),
+      z.object({ data: z.array(BuildSchema), cursor: z.string().nullish() }),
       await response.json(),
       "listBuilds",
     );
     all.push(...data.data);
-    cursor = data.cursor;
+    cursor = data.cursor ?? undefined;
     if (!cursor || data.data.length === 0) break;
   }
   return { builds: all, hasMore: !!cursor };
