@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 const BASE_URL_V3 = "https://codemagic.io";
 const BASE_URL_V1 = "https://api.codemagic.io";
 
@@ -9,11 +11,91 @@ async function buildApiError(response: Response): Promise<Error> {
   return new Error(`Codemagic API error: ${response.status} ${response.statusText}${detail}`);
 }
 
+function parseOrThrow<T>(schema: z.ZodType<T>, data: unknown, context: string): T {
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    const issues = result.error.issues
+      .map(i => `${i.path.join(".") || "(root)"}: ${i.message}`)
+      .join("; ");
+    throw new Error(`${context}: unexpected response shape — ${issues}`);
+  }
+  return result.data;
+}
+
+const ArtifactSchema = z.object({
+  name: z.string(),
+  type: z.string(),
+  size_in_bytes: z.number(),
+  short_lived_download_url: z.string(),
+  version_name: z.string().nullable(),
+  version_code: z.string().nullable(),
+});
+
+const BuildSchema = z.object({
+  id: z.string(),
+  app_id: z.string(),
+  status: z.string(),
+  index: z.number(),
+  branch: z.string().nullable(),
+  tag: z.string().nullable(),
+  created_at: z.string(),
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+  artifacts: z.array(ArtifactSchema),
+});
+
+const ApplicationSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  icon_url: z.string(),
+  last_build_id: z.string(),
+  archived: z.boolean(),
+});
+
+const TeamSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+const VariableGroupSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+});
+
+const VariableSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  value: z.string().nullable(),
+  secure: z.boolean(),
+});
+
+const CacheRawSchema = z.object({
+  _id: z.string(),
+  workflowId: z.string(),
+  lastUsed: z.string(),
+  size: z.number(),
+});
+
+const BuildActionSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  status: z.string().nullable(),
+});
+
+const WebhookSchema = z.object({
+  _id: z.string(),
+  appId: z.string(),
+  url: z.string(),
+  events: z.array(z.string()),
+  branchPatterns: z.array(z.string()).optional(),
+});
+
 /**
  * Fetch all pages of a page-numbered v3 list endpoint.
  * Uses page_size=100 to minimise round trips. Stops when current_page >= total_pages.
  */
-async function fetchAllPages<T>(apiToken: string, url: string, extraParams = new URLSearchParams()): Promise<T[]> {
+async function fetchAllPages<T>(apiToken: string, url: string, itemSchema: z.ZodType<T>, extraParams = new URLSearchParams()): Promise<T[]> {
   const all: T[] = [];
   let page = 1;
   while (true) {
@@ -25,9 +107,14 @@ async function fetchAllPages<T>(apiToken: string, url: string, extraParams = new
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) throw await buildApiError(response);
-    const data = await response.json() as { data: T[]; current_page: number; total_pages: number };
-    all.push(...data.data);
-    if (data.current_page >= data.total_pages || data.data.length === 0) break;
+    const envelope = parseOrThrow(
+      z.object({ data: z.array(z.unknown()), current_page: z.number(), total_pages: z.number() }),
+      await response.json(),
+      `fetchAllPages(${url})`,
+    );
+    const items = envelope.data.map(item => parseOrThrow(itemSchema, item, url));
+    all.push(...items);
+    if (envelope.current_page >= envelope.total_pages || items.length === 0) break;
     page++;
   }
   return all;
@@ -50,7 +137,7 @@ export async function listApplications(apiToken: string, teamId?: string): Promi
   const url = teamId
     ? `${BASE_URL_V3}/api/v3/teams/${teamId}/apps`
     : `${BASE_URL_V3}/api/v3/user/apps`;
-  return fetchAllPages<Application>(apiToken, url);
+  return fetchAllPages(apiToken, url, ApplicationSchema);
 }
 
 export interface Team {
@@ -64,7 +151,7 @@ export interface Team {
  * @param apiToken - Codemagic API token.
  */
 export async function listTeams(apiToken: string): Promise<Team[]> {
-  return fetchAllPages<Team>(apiToken, `${BASE_URL_V3}/api/v3/user/teams`);
+  return fetchAllPages(apiToken, `${BASE_URL_V3}/api/v3/user/teams`, TeamSchema);
 }
 
 export interface Artifact {
@@ -125,7 +212,11 @@ export async function listBuilds(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
     if (!response.ok) throw await buildApiError(response);
-    const data = await response.json() as { data: Build[]; cursor?: string };
+    const data = parseOrThrow(
+      z.object({ data: z.array(BuildSchema), cursor: z.string().optional() }),
+      await response.json(),
+      "listBuilds",
+    );
     all.push(...data.data);
     cursor = data.cursor;
     if (!cursor || data.data.length === 0) break;
@@ -144,8 +235,8 @@ export async function getBuild(apiToken: string, buildId: string): Promise<Build
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: Build };
-  return data.data;
+  const { data } = parseOrThrow(z.object({ data: BuildSchema }), await response.json(), "getBuild");
+  return data;
 }
 
 export interface TriggerBuildParams {
@@ -195,8 +286,8 @@ export async function triggerBuild(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { buildId: string };
-  return data.buildId;
+  const { buildId } = parseOrThrow(z.object({ buildId: z.string() }), await response.json(), "triggerBuild");
+  return buildId;
 }
 
 export interface Workflow {
@@ -232,15 +323,12 @@ export async function listWorkflows(apiToken: string, appId: string): Promise<Wo
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as {
-    application: {
-      workflows: Record<string, { name: string }>;
-    };
-  };
-  return Object.entries(data.application.workflows).map(([id, workflow]) => ({
-    id,
-    name: workflow.name,
-  }));
+  const { application } = parseOrThrow(
+    z.object({ application: z.object({ workflows: z.record(z.string(), z.object({ name: z.string() })) }) }),
+    await response.json(),
+    "listWorkflows",
+  );
+  return Object.entries(application.workflows).map(([id, workflow]) => ({ id, name: workflow.name }));
 }
 
 /**
@@ -274,7 +362,15 @@ export async function addApplication(
   });
   if (!response.ok) throw await buildApiError(response);
 
-  const data = await response.json() as { application?: { _id: string; appName: string }; _id?: string; appName?: string };
+  const data = parseOrThrow(
+    z.object({
+      application: z.object({ _id: z.string(), appName: z.string() }).optional(),
+      _id: z.string().optional(),
+      appName: z.string().optional(),
+    }),
+    await response.json(),
+    "addApplication",
+  );
   const id = data.application?._id ?? data._id;
   const appName = data.application?.appName ?? data.appName;
   if (!id || !appName) {
@@ -327,7 +423,7 @@ export async function listVariableGroups(apiToken: string, teamId?: string, appI
   const url = teamId
     ? `${BASE_URL_V3}/api/v3/teams/${teamId}/variable-groups`
     : `${BASE_URL_V3}/api/v3/apps/${appId}/variable-groups`;
-  return fetchAllPages<VariableGroup>(apiToken, url);
+  return fetchAllPages(apiToken, url, VariableGroupSchema);
 }
 
 /**
@@ -338,7 +434,7 @@ export async function listVariableGroups(apiToken: string, teamId?: string, appI
  * @param groupId - The variable group ID.
  */
 export async function listVariables(apiToken: string, groupId: string): Promise<Variable[]> {
-  return fetchAllPages<Variable>(apiToken, `${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`);
+  return fetchAllPages(apiToken, `${BASE_URL_V3}/api/v3/variable-groups/${groupId}/variables`, VariableSchema);
 }
 
 /**
@@ -373,8 +469,8 @@ export async function createVariableGroup(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { data: VariableGroup };
-  return data.data;
+  const { data } = parseOrThrow(z.object({ data: VariableGroupSchema }), await response.json(), "createVariableGroup");
+  return data;
 }
 
 /**
@@ -471,8 +567,8 @@ export async function listCaches(apiToken: string, appId: string): Promise<Cache
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { caches: Array<{ _id: string; workflowId: string; lastUsed: string; size: number }> };
-  return data.caches.map(c => ({ id: c._id, workflowId: c.workflowId, lastUsed: c.lastUsed, size: c.size }));
+  const { caches } = parseOrThrow(z.object({ caches: z.array(CacheRawSchema) }), await response.json(), "listCaches");
+  return caches.map(c => ({ id: c._id, workflowId: c.workflowId, lastUsed: c.lastUsed, size: c.size }));
 }
 
 /**
@@ -493,8 +589,8 @@ export async function deleteCache(apiToken: string, appId: string, cacheId?: str
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  const data = await response.json() as { caches: string[] };
-  return data.caches;
+  const { caches } = parseOrThrow(z.object({ caches: z.array(z.string()) }), await response.json(), "deleteCache");
+  return caches;
 }
 
 /**
@@ -525,7 +621,7 @@ export async function createPublicArtifactUrl(
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  return response.json() as Promise<{ url: string; expiresAt: string }>;
+  return parseOrThrow(z.object({ url: z.string(), expiresAt: z.string() }), await response.json(), "createPublicArtifactUrl");
 }
 
 // ─── Webhooks ────────────────────────────────────────────────────────────────
@@ -561,7 +657,7 @@ export async function listWebhooks(apiToken: string, appId: string): Promise<Web
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!response.ok) throw await buildApiError(response);
-  return response.json() as Promise<Webhook[]>;
+  return parseOrThrow(z.array(WebhookSchema), await response.json(), "listWebhooks");
 }
 
 /**
@@ -594,7 +690,7 @@ export interface BuildAction {
  * @param buildId - The build ID.
  */
 export async function getBuildActions(apiToken: string, buildId: string): Promise<BuildAction[]> {
-  return fetchAllPages<BuildAction>(apiToken, `${BASE_URL_V3}/api/v3/builds/${buildId}/actions`);
+  return fetchAllPages(apiToken, `${BASE_URL_V3}/api/v3/builds/${buildId}/actions`, BuildActionSchema);
 }
 
 /**

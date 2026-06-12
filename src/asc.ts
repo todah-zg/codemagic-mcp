@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createWriteStream } from "node:fs";
@@ -9,6 +10,20 @@ import { pipeline } from "node:stream/promises";
 import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
+
+const AscBuildEntrySchema = z.object({
+  id: z.string(),
+  attributes: z.object({
+    buildNumber: z.string().optional(),
+    version: z.string().optional(),
+  }).optional(),
+  buildNumber: z.string().optional(),
+  version: z.string().optional(),
+});
+
+const AscUploadResponseSchema = z.object({
+  data: z.union([z.array(AscBuildEntrySchema), AscBuildEntrySchema]),
+});
 
 const EXEC_BUFFER = 32 * 1024 * 1024;          // 32 MB — covers large build/app lists
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;     // 30 min — upload + Apple processing wait
@@ -258,9 +273,9 @@ export async function uploadBuildToAsc(appId: string, ipaUrl: string): Promise<A
     const { stdout } = await execFileAsync("asc", [
       "builds", "upload", "--app", appId, "--ipa", tempPath, "--output", "json",
     ], { maxBuffer: EXEC_BUFFER, timeout: UPLOAD_TIMEOUT_MS });
-    const raw = JSON.parse(stdout);
-    const build = Array.isArray(raw.data) ? raw.data[0] : raw.data;
-    if (!build?.id) throw new Error(`Unexpected upload response: ${stdout.slice(0, 200)}`);
+    const parsed = AscUploadResponseSchema.parse(JSON.parse(stdout));
+    const build = Array.isArray(parsed.data) ? parsed.data[0] : parsed.data;
+    if (!build) throw new Error(`Unexpected upload response — no build entry in: ${stdout.slice(0, 200)}`);
     return {
       id: build.id,
       buildNumber: build.attributes?.buildNumber ?? build.buildNumber ?? "unknown",
