@@ -643,7 +643,7 @@ export function getWebhookUrl(appId: string): string {
  * @param appId - The Codemagic app ID.
  */
 export async function listWebhooks(apiToken: string, appId: string): Promise<Webhook[]> {
-  const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks`, {
+  const response = await fetch(`${BASE_URL_V1}/apps/${appId}/webhooks`, {
     headers: { "x-auth-token": apiToken },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
@@ -658,7 +658,7 @@ export async function listWebhooks(apiToken: string, appId: string): Promise<Web
  * @param webhookId - The webhook ID to delete.
  */
 export async function deleteWebhook(apiToken: string, appId: string, webhookId: string): Promise<void> {
-  const response = await fetch(`https://api.codemagic.io/apps/${appId}/webhooks/${webhookId}`, {
+  const response = await fetch(`${BASE_URL_V1}/apps/${appId}/webhooks/${webhookId}`, {
     method: "DELETE",
     headers: { "x-auth-token": apiToken },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
