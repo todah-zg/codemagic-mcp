@@ -13,6 +13,8 @@ const execFileAsync = promisify(execFile);
 const EXEC_BUFFER = 32 * 1024 * 1024;
 const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;
 const CLI_TIMEOUT_MS = 60_000;
+const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;  // 15 min — artifact download from Codemagic
+const MAX_ARTIFACT_BYTES = 4 * 1024 ** 3;    // 4 GB  — sanity cap before streaming to disk
 
 /**
  * Run a `google-play` CLI command and parse its JSON output.
@@ -97,10 +99,12 @@ export async function uploadToGooglePlay(
 ): Promise<string> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
 
-  const response = await fetch(aabUrl);
+  const response = await fetch(aabUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) {
     throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
   }
+  const aabLen = parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (aabLen > MAX_ARTIFACT_BYTES) throw new Error(`AAB too large to download: ${aabLen} bytes`);
   if (!response.body) throw new Error("AAB response body is empty");
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
 
@@ -180,8 +184,10 @@ export async function setRolloutFraction(
  */
 export async function shareAppInternally(aabUrl: string): Promise<unknown> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.aab`);
-  const response = await fetch(aabUrl);
+  const response = await fetch(aabUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`Failed to download AAB: ${response.status} ${response.statusText}`);
+  const aabLen = parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (aabLen > MAX_ARTIFACT_BYTES) throw new Error(`AAB too large to download: ${aabLen} bytes`);
   if (!response.body) throw new Error("AAB response body is empty");
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
   try {

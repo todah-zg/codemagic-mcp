@@ -10,9 +10,11 @@ import { randomUUID } from "node:crypto";
 
 const execFileAsync = promisify(execFile);
 
-const EXEC_BUFFER = 32 * 1024 * 1024;     // 32 MB — covers large build/app lists
-const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000; // 30 min — upload + Apple processing wait
-const CLI_TIMEOUT_MS = 60_000;             // 60 s  — list / status commands
+const EXEC_BUFFER = 32 * 1024 * 1024;          // 32 MB — covers large build/app lists
+const UPLOAD_TIMEOUT_MS = 30 * 60 * 1000;     // 30 min — upload + Apple processing wait
+const CLI_TIMEOUT_MS = 60_000;                 // 60 s  — list / status commands
+const DOWNLOAD_TIMEOUT_MS = 15 * 60 * 1000;   // 15 min — artifact download from Codemagic
+const MAX_ARTIFACT_BYTES = 4 * 1024 ** 3;     // 4 GB  — sanity cap before streaming to disk
 
 /**
  * Run an `asc` CLI command and parse its JSON output.
@@ -208,10 +210,12 @@ export async function uploadToTestFlight(
 ): Promise<string> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
 
-  const response = await fetch(ipaUrl);
+  const response = await fetch(ipaUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) {
     throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
   }
+  const ipaLen = parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (ipaLen > MAX_ARTIFACT_BYTES) throw new Error(`IPA too large to download: ${ipaLen} bytes`);
   if (!response.body) throw new Error("IPA response body is empty");
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
 
@@ -244,8 +248,10 @@ export interface AscBuildUploadResult {
  */
 export async function uploadBuildToAsc(appId: string, ipaUrl: string): Promise<AscBuildUploadResult> {
   const tempPath = join(tmpdir(), `cm-${randomUUID()}.ipa`);
-  const response = await fetch(ipaUrl);
+  const response = await fetch(ipaUrl, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
   if (!response.ok) throw new Error(`Failed to download IPA: ${response.status} ${response.statusText}`);
+  const ipaLen = parseInt(response.headers.get("content-length") ?? "0", 10);
+  if (ipaLen > MAX_ARTIFACT_BYTES) throw new Error(`IPA too large to download: ${ipaLen} bytes`);
   if (!response.body) throw new Error("IPA response body is empty");
   await pipeline(Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]), createWriteStream(tempPath));
   try {
