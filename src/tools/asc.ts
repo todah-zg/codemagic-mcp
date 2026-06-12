@@ -250,7 +250,7 @@ export function registerAscTools(server: McpServer): void {
     },
     inputSchema: {
       app_id: z.string().describe("The App Store Connect app ID (from list_asc_apps)"),
-      email: z.string().describe("Tester email address"),
+      email: z.string().email().describe("Tester email address"),
       group: z.string().optional().describe("Beta group name or ID to add the tester to (from list_testflight_groups)"),
     },
   }, async ({ app_id, email, group }) => {
