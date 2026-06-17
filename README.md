@@ -33,7 +33,7 @@ The intended end-to-end flows are:
 
 | Variable | Description |
 |----------|-------------|
-| `CODEMAGIC_API_TOKEN` | Your Codemagic API token. Found in Codemagic → User settings → Integrations. |
+| `CODEMAGIC_API_TOKEN` | Your Codemagic API token. Found in Codemagic → Account settings. |
 
 ### App Store Connect tools (iOS)
 
