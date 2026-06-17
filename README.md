@@ -2,6 +2,10 @@
 
 An MCP (Model Context Protocol) server that gives AI agents a unified surface over **Codemagic CI/CD** and **App Store Connect / Google Play**, enabling a complete mobile app delivery pipeline — from onboarding a repository through building, signing, and publishing — driven by conversation.
 
+[![codemagic-mcp MCP server](https://glama.ai/mcp/servers/todah-zg/codemagic-mcp/badges/card.svg)](https://glama.ai/mcp/servers/todah-zg/codemagic-mcp)
+
+[![codemagic-mcp MCP server](https://glama.ai/mcp/servers/todah-zg/codemagic-mcp/badges/score.svg)](https://glama.ai/mcp/servers/todah-zg/codemagic-mcp)
+
 ## What it does
 
 The server exposes tools across five domains:
